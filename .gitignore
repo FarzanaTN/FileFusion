@@ -1,0 +1,6 @@
+venv/
+converted/
+uploads/
+backend/converted/
+backend/uploads/
+backend/__pycache__/
