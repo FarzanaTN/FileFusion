@@ -2,7 +2,7 @@ import socket
 import threading
 import os
 import time
-from converter import convert_pptx_to_pdf
+from converter import convert_with_libreoffice
 
 HOST = '0.0.0.0'
 PORT = 65432
@@ -38,60 +38,45 @@ def receive_with_progress(conn, dest_path):
 
 def handle_client(conn, addr):
     print(f"[NEW CONNECTION] {addr} connected.")
-
     try:
-        # Receive original file name size and name
         name_len = int(conn.recv(4).decode())
         filename = conn.recv(name_len).decode()
-        print(f"Receiving file: {filename}")
-        
+
+        output_format = conn.recv(8).decode().strip().lower()
+
         ext = os.path.splitext(filename)[1].lower()
-        if ext not in [".pptx", ".docx"]:
-            conn.sendall(b"ERROR")
+        if ext not in [".pptx", ".doc", ".docx", ".odt", ".xls", ".xlsx"]:
+            conn.sendall(b"ER")
             conn.close()
             return
 
-        # Receive file with progress
+        input_path = os.path.join(UPLOAD_DIR, filename)
+        output_filename = f"{os.path.splitext(filename)[0]}.{output_format}"
+        output_path = os.path.join(CONVERTED_DIR, output_filename)
+
         upload_start = time.time()
-        uploaded_size = receive_with_progress(conn, os.path.join(UPLOAD_DIR, filename))
+        receive_with_progress(conn, input_path)
         upload_end = time.time()
 
-        print(f"Upload completed in {upload_end - upload_start:.2f} seconds")
-
-        # Convert the file
-        input_file = os.path.join(UPLOAD_DIR, filename)
-        output_file = os.path.join(CONVERTED_DIR, f"{os.path.splitext(filename)[0]}.pdf")
-
-        success = convert_pptx_to_pdf(input_file, output_file)
+        success = convert_with_libreoffice(input_path, output_path, output_format)
         if not success:
-            conn.sendall(b"ERROR")
+            conn.sendall(b"ER")
             conn.close()
             return
 
-        # Notify client conversion done and send converted file size and file
         conn.sendall(b"OK")
 
-        # Send converted file name length and name
-        converted_filename = os.path.basename(output_file)
-        conn.sendall(str(len(converted_filename)).encode().ljust(4))
-        conn.sendall(converted_filename.encode())
+        conn.sendall(str(len(output_filename)).encode().ljust(4))
+        conn.sendall(output_filename.encode())
+        send_with_progress(conn, output_path)
 
-        # Send converted file with progress and timing
-        download_start = time.time()
-        send_with_progress(conn, output_file)
         download_end = time.time()
-        
-        
 
-        # Send upload time and download time as float strings
         conn.sendall(f"{upload_end - upload_start:.4f}".encode().ljust(16))
-        conn.sendall(f"{download_end - download_start:.4f}".encode().ljust(16))
-
-        print(f"Download sent in {download_end - download_start:.2f} seconds")
+        conn.sendall(f"{download_end - upload_end:.4f}".encode().ljust(16))
 
     except Exception as e:
         print("Error handling client:", e)
-
     finally:
         conn.close()
         print(f"[DISCONNECTED] {addr} disconnected.")
