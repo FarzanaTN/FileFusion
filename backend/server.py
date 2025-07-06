@@ -1,258 +1,196 @@
-# Fixed server.py with proper Go-Back-N ACK implementation
 import socket
 import threading
 import os
 import time
-import random
+import traceback
+import struct
 from converter import convert_with_libreoffice
 
 HOST = '0.0.0.0'
 PORT = 65432
-BUFFER_SIZE = 8192  # Smaller buffer for more reliable transfer
+BUFFER_SIZE = 4096
+WINDOW_SIZE = 10
+TIMEOUT = 1.0
 UPLOAD_DIR = 'uploads'
 CONVERTED_DIR = 'converted'
-WINDOW_SIZE = 4
-DROP_PROBABILITY = 0.01  # Reduced drop probability
+TIMEOUT = 10.0  # Align with client timeout
+
 
 os.makedirs(UPLOAD_DIR, exist_ok=True)
 os.makedirs(CONVERTED_DIR, exist_ok=True)
 
-def receive_with_gobackn(conn, total_size):
-    """Receive file using Go-Back-N protocol with ACK"""
-    total_packets = (total_size + BUFFER_SIZE - 1) // BUFFER_SIZE
-    received_packets = {}
-    expected_seq = 0
-    received_bytes = 0
-    
-    print(f"[SERVER] Expecting {total_size} bytes in {total_packets} packets")
-    
-    while received_bytes < total_size:
+def send_with_progress(conn, file_path):
+    filesize = os.path.getsize(file_path)
+    packet_count = min(100, (filesize + BUFFER_SIZE - 1) // BUFFER_SIZE)
+    adjusted_buffer = (filesize + packet_count - 1) // packet_count if filesize > BUFFER_SIZE * 100 else BUFFER_SIZE
+
+    conn.sendall(str(filesize).encode().ljust(16))
+    print(f"[SEND] Expecting {packet_count} ACKs for {file_path}")
+
+    base = 0
+    next_seq = 0
+    packets = []
+    with open(file_path, 'rb') as f:
+        while True:
+            data = f.read(adjusted_buffer)
+            if not data:
+                break
+            packets.append(data)
+
+    while base < len(packets):
+        while next_seq < min(base + WINDOW_SIZE, len(packets)):
+            conn.sendall(struct.pack('!I', next_seq))  # Send seq as 4-byte unsigned int
+            conn.sendall(packets[next_seq])
+            print(f"[SEND] Sent packet {next_seq}")
+            next_seq += 1
+
+        conn.settimeout(TIMEOUT)
         try:
-            conn.settimeout(10.0)
-            
-            # Receive sequence number
-            seq_data = conn.recv(4)
-            if not seq_data:
+            ack_data = conn.recv(4)
+            if len(ack_data) != 4:
+                print(f"[SEND] Incomplete ACK received, len={len(ack_data)}")
+                next_seq = base
                 continue
-                
-            seq_num = int.from_bytes(seq_data, 'big')
-            
-            # Receive data
-            remaining = total_size - received_bytes
-            chunk_size = min(BUFFER_SIZE, remaining)
-            chunk = conn.recv(chunk_size)
-            
-            if not chunk:
-                continue
-                
-            print(f"[SERVER] Received packet {seq_num} ({len(chunk)} bytes)")
-            
-            if seq_num == expected_seq:
-                # Correct packet received
-                received_packets[seq_num] = chunk
-                received_bytes += len(chunk)
-                expected_seq += 1
-                
-                # Send ACK for this packet
-                ack = seq_num.to_bytes(4, 'big')
-                conn.sendall(ack)
-                print(f"[SERVER] Sent ACK {seq_num}")
-                
-            else:
-                # Wrong packet, send ACK for last correct packet
-                ack = (expected_seq - 1).to_bytes(4, 'big')
-                conn.sendall(ack)
-                print(f"[SERVER] Wrong packet {seq_num}, sent ACK {expected_seq - 1}")
-                
+            ack = struct.unpack('!I', ack_data)[0]
+            print(f"[SEND] Received ACK {ack}")
+            if ack >= base:
+                base = ack + 1
         except socket.timeout:
-            print("[SERVER] Timeout waiting for packet")
+            print(f"[SEND] Timeout, resending from {base}")
+            next_seq = base
             continue
         except Exception as e:
-            print(f"[SERVER] Error receiving packet: {e}")
-            break
-    
-    # Reconstruct file
-    file_data = b""
-    for i in range(total_packets):
-        if i in received_packets:
-            file_data += received_packets[i]
-    
-    print(f"[SERVER] Received {len(file_data)} bytes total")
-    return file_data
+            print(f"[SEND] Error receiving ACK: {e}")
+            next_seq = base
+            continue
 
-def send_with_gobackn(conn, file_path):
-    """Send file using Go-Back-N protocol with ACK"""
-    try:
-        with open(file_path, 'rb') as f:
-            file_bytes = f.read()
-    except Exception as e:
-        print(f"[SERVER] Cannot read file {file_path}: {e}")
-        return False
+def receive_with_progress(conn, dest_path):
+    filesize_data = conn.recv(16)
+    if len(filesize_data) != 16:
+        raise ValueError(f"Invalid filesize data, received {len(filesize_data)} bytes")
+    filesize = int(filesize_data.decode().strip())
+    packet_count = min(100, (filesize + BUFFER_SIZE - 1) // BUFFER_SIZE)
+    adjusted_buffer = (filesize + packet_count - 1) // packet_count if filesize > BUFFER_SIZE * 100 else BUFFER_SIZE
+    print(f"[RECV] Expecting {packet_count} ACKs for {dest_path}, filesize={filesize}")
 
-    total_packets = (len(file_bytes) + BUFFER_SIZE - 1) // BUFFER_SIZE
-    seq_num = 0
-    base = 0
-    
-    print(f"[SERVER] Sending {len(file_bytes)} bytes in {total_packets} packets")
-    
-    # Send file size first
-    conn.sendall(str(len(file_bytes)).encode().ljust(16))
-    time.sleep(0.1)
-    
-    while base < total_packets:
-        # Send packets in current window
-        while seq_num < base + WINDOW_SIZE and seq_num < total_packets:
-            start = seq_num * BUFFER_SIZE
-            end = min(start + BUFFER_SIZE, len(file_bytes))
-            chunk = file_bytes[start:end]
-            
-            # Simulate packet drop
-            if random.random() > DROP_PROBABILITY:
-                try:
-                    # Send sequence number + data
-                    packet = seq_num.to_bytes(4, 'big') + chunk
-                    conn.sendall(packet)
-                    print(f"[SERVER] Sent packet {seq_num} ({len(chunk)} bytes)")
-                except Exception as e:
-                    print(f"[SERVER] Error sending packet {seq_num}: {e}")
-                    return False
-            else:
-                print(f"[SERVER] Simulated drop of packet {seq_num}")
-            
-            seq_num += 1
-        
-        # Wait for ACK
-        try:
-            conn.settimeout(5.0)
-            ack_data = conn.recv(4)
-            if ack_data:
-                ack_num = int.from_bytes(ack_data, 'big')
-                print(f"[SERVER] Received ACK {ack_num}")
-                
-                if ack_num >= base:
-                    base = ack_num + 1
-                
-        except socket.timeout:
-            print(f"[SERVER] Timeout waiting for ACK, resending from {base}")
-            seq_num = base
-        except Exception as e:
-            print(f"[SERVER] Error receiving ACK: {e}")
-            return False
-    
-    print(f"[SERVER] File transfer completed successfully")
-    return True
+    expected_seq = 0
+    received = 0
+    with open(dest_path, 'wb') as f:
+        while received < filesize:
+            conn.settimeout(TIMEOUT)
+            try:
+                seq_data = conn.recv(4)
+                if len(seq_data) != 4:
+                    print(f"[RECV] Incomplete sequence number, len={len(seq_data)}")
+                    conn.sendall(struct.pack('!I', expected_seq - 1))
+                    continue
+                seq = struct.unpack('!I', seq_data)[0]
+                data = conn.recv(adjusted_buffer)
+                if len(data) == 0:
+                    print(f"[RECV] No data received for packet {seq}")
+                    conn.sendall(struct.pack('!I', expected_seq - 1))
+                    continue
+                if seq == expected_seq:
+                    f.write(data)
+                    received += len(data)
+                    conn.sendall(struct.pack('!I', expected_seq))
+                    print(f"[RECV] Received packet {seq}, sent ACK {expected_seq}, bytes={len(data)}")
+                    expected_seq += 1
+                else:
+                    conn.sendall(struct.pack('!I', expected_seq - 1))
+                    print(f"[RECV] Out-of-order packet {seq}, sent ACK {expected_seq - 1}")
+            except socket.timeout:
+                conn.sendall(struct.pack('!I', expected_seq - 1))
+                print(f"[RECV] Timeout, sent ACK {expected_seq - 1}")
+                continue
+            except Exception as e:
+                print(f"[RECV] Error: {e}")
+                conn.sendall(struct.pack('!I', expected_seq - 1))
+                continue
+    return filesize
 
 def handle_client(conn, addr):
     print(f"[NEW CONNECTION] {addr} connected.")
     try:
-        # Receive file metadata
-        name_len = int(conn.recv(4).decode())
+        name_len_data = conn.recv(4)
+        if len(name_len_data) != 4:
+            raise ValueError(f"Invalid name length data, received {len(name_len_data)} bytes")
+        name_len = int(name_len_data.decode())
         filename = conn.recv(name_len).decode()
         output_format = conn.recv(8).decode().strip().lower()
-        print(f"[INFO] File: {filename}, Format: {output_format}")
 
-        # Validate file extension
         ext = os.path.splitext(filename)[1].lower()
         if ext not in [".pptx", ".doc", ".docx", ".odt", ".xls", ".xlsx"]:
-            print(f"[ERROR] Unsupported file type: {ext}")
             conn.sendall(b"ER")
+            conn.close()
             return
 
-        # Set up file paths
         input_path = os.path.join(UPLOAD_DIR, filename)
         output_filename = f"{os.path.splitext(filename)[0]}.{output_format}"
         output_path = os.path.join(CONVERTED_DIR, output_filename)
 
-        # Receive file size
-        filesize = int(conn.recv(16).decode().strip())
-        print(f"[INFO] Receiving file ({filesize:,} bytes)")
-        
-        # Receive file using Go-Back-N
         upload_start = time.time()
-        file_data = receive_with_gobackn(conn, filesize)
+        filesize = receive_with_progress(conn, input_path)
         upload_end = time.time()
-        
-        if len(file_data) == 0:
-            print(f"[ERROR] No data received")
+
+        actual_size = os.path.getsize(input_path)
+        if actual_size != filesize:
+            print(f"[ERROR] File size mismatch: expected {filesize}, got {actual_size}")
             conn.sendall(b"ER")
+            conn.close()
             return
 
-        # Save uploaded file
-        with open(input_path, 'wb') as f:
-            f.write(file_data)
-        print(f"[INFO] File saved to {input_path}")
-        print(f"[INFO] Upload time: {upload_end - upload_start:.2f}s")
-
-        # Convert file
-        print(f"[INFO] Starting conversion...")
-        conversion_start = time.time()
-        success = convert_with_libreoffice(input_path, output_path, output_format)
-        conversion_end = time.time()
-        
-        if not success or not os.path.exists(output_path):
-            print(f"[ERROR] Conversion failed")
-            conn.sendall(b"ER")
+        try:
+            print(f"[CONVERSION] Starting conversion of {input_path} to {output_path}")
+            success = convert_with_libreoffice(input_path, output_path, output_format)
+            if not success:
+                print(f"[ERROR] Conversion failed for {input_path}")
+                conn.sendall(b"CV")
+                conn.close()
+                return
+        except Exception as e:
+            print(f"[ERROR] Conversion error: {str(e)}")
+            print(traceback.format_exc())
+            conn.sendall(b"CV")
+            conn.close()
             return
 
-        print(f"[INFO] Conversion successful. Output: {output_path}")
-        print(f"[INFO] Conversion time: {conversion_end - conversion_start:.2f}s")
-
-        # Send success response
         conn.sendall(b"OK")
-        
-        # Send converted file info
         conn.sendall(str(len(output_filename)).encode().ljust(4))
         conn.sendall(output_filename.encode())
-        
-        # Send converted file using Go-Back-N
-        print(f"[INFO] Starting file download...")
-        download_start = time.time()
-        send_success = send_with_gobackn(conn, output_path)
+        send_with_progress(conn, output_path)
+
         download_end = time.time()
-        
-        if send_success:
-            # Send timing information
-            conn.sendall(f"{upload_end - upload_start:.4f}".encode().ljust(16))
-            conn.sendall(f"{download_end - download_start:.4f}".encode().ljust(16))
-            print(f"[INFO] Download time: {download_end - download_start:.2f}s")
-            print(f"[INFO] Total processing time: {download_end - upload_start:.2f}s")
-        else:
-            print("[ERROR] Failed to send converted file")
+
+        conn.sendall(f"{upload_end - upload_start:.4f}".encode().ljust(16))
+        conn.sendall(f"{download_end - upload_end:.4f}".encode().ljust(16))
 
     except Exception as e:
-        print(f"[ERROR] Error handling client {addr}: {e}")
-        import traceback
-        traceback.print_exc()
-        try:
-            conn.sendall(b"ER")
-        except:
-            pass
+        print(f"[ERROR] Error handling client: {str(e)}")
+        print(traceback.format_exc())
+        conn.sendall(b"ER")
     finally:
+        # conn.close()
+        # print(f"[DISCONNECTED] {addr} disconnected.")
         try:
             conn.close()
         except:
             pass
         print(f"[DISCONNECTED] {addr} disconnected.")
 
+
 def start_server():
     print("[STARTING] Server is starting...")
     server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    server.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
     server.bind((HOST, PORT))
     server.listen(5)
     print(f"[LISTENING] Server listening on {HOST}:{PORT}")
 
-    try:
-        while True:
-            conn, addr = server.accept()
-            thread = threading.Thread(target=handle_client, args=(conn, addr))
-            thread.daemon = True
-            thread.start()
-            print(f"[ACTIVE CONNECTIONS] {threading.active_count() - 1}")
-    except KeyboardInterrupt:
-        print("\n[SHUTTING DOWN] Server shutting down...")
-    finally:
-        server.close()
+    while True:
+        conn, addr = server.accept()
+        thread = threading.Thread(target=handle_client, args=(conn, addr))
+        thread.start()
+        print(f"[ACTIVE CONNECTIONS] {threading.active_count() - 1}")
 
 if __name__ == "__main__":
     start_server()
