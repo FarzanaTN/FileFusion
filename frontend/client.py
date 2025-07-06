@@ -1,15 +1,14 @@
-# Fixed client.py with proper Go-Back-N ACK implementation
 import socket
 import streamlit as st
 import time
 import os
-import random
+import struct
 
 HOST = '127.0.0.1'
 PORT = 65432
-BUFFER_SIZE = 1024  # Smaller buffer for more reliable transfer
-WINDOW_SIZE = 4
-DROP_PROBABILITY = 0.01  # Reduced drop probability
+BUFFER_SIZE = 4096
+WINDOW_SIZE = 10
+TIMEOUT = 10.0  # Increased timeout to handle network delays
 
 ALLOWED_CONVERSIONS = {
     ".doc": ["pdf", "docx", "odt"],
@@ -20,132 +19,92 @@ ALLOWED_CONVERSIONS = {
     ".xls": ["pdf"],
 }
 
-def send_with_gobackn(sock, file_bytes, progress_bar):
-    """Send file using Go-Back-N protocol with ACK"""
-    total_packets = (len(file_bytes) + BUFFER_SIZE - 1) // BUFFER_SIZE
-    seq_num = 0
-    base = 0
-    
-    print(f"[CLIENT] Sending {len(file_bytes)} bytes in {total_packets} packets")
-    
-    while base < total_packets:
-        # Send packets in current window
-        while seq_num < base + WINDOW_SIZE and seq_num < total_packets:
-            start = seq_num * BUFFER_SIZE
-            end = min(start + BUFFER_SIZE, len(file_bytes))
-            chunk = file_bytes[start:end]
-            
-            # Simulate packet drop
-            if random.random() > DROP_PROBABILITY:
-                try:
-                    # Send sequence number + data
-                    packet = seq_num.to_bytes(4, 'big') + chunk
-                    sock.sendall(packet)
-                    print(f"[CLIENT] Sent packet {seq_num} ({len(chunk)} bytes)")
-                except Exception as e:
-                    print(f"[CLIENT] Error sending packet {seq_num}: {e}")
-                    return False
-            else:
-                print(f"[CLIENT] Simulated drop of packet {seq_num}")
-            
-            seq_num += 1
-        
-        # Wait for ACK
-        try:
-            sock.settimeout(5.0)
-            ack_data = sock.recv(4)
-            if ack_data:
-                ack_num = int.from_bytes(ack_data, 'big')
-                print(f"[CLIENT] Received ACK {ack_num}")
-                
-                if ack_num >= base:
-                    base = ack_num + 1
-                    progress_bar.progress(min(base / total_packets, 1.0))
-                
-        except socket.timeout:
-            print(f"[CLIENT] Timeout waiting for ACK, resending from {base}")
-            seq_num = base
-        except Exception as e:
-            print(f"[CLIENT] Error receiving ACK: {e}")
-            return False
-    
-    print(f"[CLIENT] File transfer completed successfully")
-    return True
+def send_with_progress(sock, file_bytes, progress_bar):
+    total = len(file_bytes)
+    packet_count = min(100, (total + BUFFER_SIZE - 1) // BUFFER_SIZE)
+    adjusted_buffer = (total + packet_count - 1) // packet_count if total > BUFFER_SIZE * 100 else BUFFER_SIZE
+    sock.sendall(str(total).encode().ljust(16))
 
-def receive_with_gobackn(sock, total_size, progress_bar):
-    """Receive file using Go-Back-N protocol with ACK"""
-    total_packets = (total_size + BUFFER_SIZE - 1) // BUFFER_SIZE
-    received_packets = {}
-    expected_seq = 0
-    received_bytes = 0
-    
-    print(f"[CLIENT] Expecting {total_size} bytes in {total_packets} packets")
-    
-    while received_bytes < total_size:
+    packets = [file_bytes[i:i + adjusted_buffer] for i in range(0, total, adjusted_buffer)]
+    base = 0
+    next_seq = 0
+    sent_bytes = 0
+
+    while base < len(packets):
+        while next_seq < min(base + WINDOW_SIZE, len(packets)):
+            sock.sendall(struct.pack('!I', next_seq))
+            sock.sendall(packets[next_seq])
+            print(f"[SEND] Sent packet {next_seq}")
+            sent_bytes = min((next_seq + 1) * adjusted_buffer, total)
+            progress_bar.progress(sent_bytes / total)
+            next_seq += 1
+
+        sock.settimeout(TIMEOUT)
         try:
-            sock.settimeout(10.0)
-            
-            # Receive sequence number
-            seq_data = sock.recv(4)
-            if not seq_data:
+            ack_data = sock.recv(4)
+            if len(ack_data) != 4:
+                print(f"[SEND] Incomplete ACK received, len={len(ack_data)}")
+                next_seq = base
                 continue
-                
-            seq_num = int.from_bytes(seq_data, 'big')
-            
-            # Receive data
-            remaining = total_size - received_bytes
-            chunk_size = min(BUFFER_SIZE, remaining)
-            chunk = sock.recv(chunk_size)
-            
-            if not chunk:
-                continue
-                
-            print(f"[CLIENT] Received packet {seq_num} ({len(chunk)} bytes)")
-            
-            if seq_num == expected_seq:
-                # Correct packet received
-                received_packets[seq_num] = chunk
-                received_bytes += len(chunk)
-                expected_seq += 1
-                
-                # Send ACK for this packet
-                ack = seq_num.to_bytes(4, 'big')
-                sock.sendall(ack)
-                print(f"[CLIENT] Sent ACK {seq_num}")
-                
-                progress_bar.progress(min(received_bytes / total_size, 1.0))
-                
-            else:
-                # Wrong packet, send ACK for last correct packet
-                ack = (expected_seq - 1).to_bytes(4, 'big')
-                sock.sendall(ack)
-                print(f"[CLIENT] Wrong packet {seq_num}, sent ACK {expected_seq - 1}")
-                
+            ack = struct.unpack('!I', ack_data)[0]
+            print(f"[SEND] Received ACK {ack}")
+            if ack >= base:
+                base = ack + 1
+                progress_bar.progress(min((base * adjusted_buffer) / total, 1.0))
         except socket.timeout:
-            print("[CLIENT] Timeout waiting for packet")
+            print(f"[SEND] Timeout, resending from {base}")
+            next_seq = base
             continue
         except Exception as e:
-            print(f"[CLIENT] Error receiving packet: {e}")
-            break
-    
-    # Reconstruct file
-    file_data = b""
-    for i in range(total_packets):
-        if i in received_packets:
-            file_data += received_packets[i]
-    
-    print(f"[CLIENT] Received {len(file_data)} bytes total")
-    return file_data
+            print(f"[SEND] Error receiving ACK: {e}")
+            next_seq = base
+            continue
+    progress_bar.progress(1.0)
+
+def receive_with_progress(sock, filesize, progress_bar):
+    packet_count = min(100, (filesize + BUFFER_SIZE - 1) // BUFFER_SIZE)
+    adjusted_buffer = (filesize + packet_count - 1) // packet_count if filesize > BUFFER_SIZE * 100 else BUFFER_SIZE
+
+    expected_seq = 0
+    received = 0
+    chunks = []
+    while received < filesize:
+        sock.settimeout(TIMEOUT)
+        try:
+            seq_data = sock.recv(4)
+            if len(seq_data) != 4:
+                print(f"[RECV] Incomplete sequence number, len={len(seq_data)}")
+                sock.sendall(struct.pack('!I', expected_seq - 1))
+                continue
+            seq = struct.unpack('!I', seq_data)[0]
+            data = sock.recv(adjusted_buffer)
+            if len(data) == 0:
+                print(f"[RECV] No data received for packet {seq}")
+                sock.sendall(struct.pack('!I', expected_seq - 1))
+                continue
+            if seq == expected_seq:
+                chunks.append(data)
+                received += len(data)
+                sock.sendall(struct.pack('!I', expected_seq))
+                print(f"[RECV] Received packet {seq}, sent ACK {expected_seq}, bytes={len(data)}")
+                expected_seq += 1
+                progress_bar.progress(min(received / filesize, 1.0))
+            else:
+                sock.sendall(struct.pack('!I', expected_seq - 1))
+                print(f"[RECV] Out-of-order packet {seq}, sent ACK {expected_seq - 1}")
+        except socket.timeout:
+            sock.sendall(struct.pack('!I', expected_seq - 1))
+            print(f"[RECV] Timeout, sent ACK {expected_seq - 1}")
+            continue
+        except Exception as e:
+            print(f"[RECV] Error: {e}")
+            sock.sendall(struct.pack('!I', expected_seq - 1))
+            continue
+    progress_bar.progress(1.0)
+    return b''.join(chunks)
 
 def main():
-    st.title("📄 Multi-Format File Converter (Go-Back-N)")
-    
-    # Initialize session state
-    if 'converted_file' not in st.session_state:
-        st.session_state.converted_file = None
-    if 'conversion_complete' not in st.session_state:
-        st.session_state.conversion_complete = False
-    
+    st.title("📄 Multi-Format File Converter")
     uploaded_file = st.file_uploader("Upload your file", type=list(ALLOWED_CONVERSIONS.keys()))
 
     output_format = None
@@ -164,106 +123,91 @@ def main():
         file_bytes = uploaded_file.read()
 
         if st.button("Upload and Convert"):
-            # Reset session state for new conversion
-            st.session_state.converted_file = None
-            st.session_state.conversion_complete = False
-            
+            sock = None
             try:
-                with st.spinner("Connecting to server..."):
-                    sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-                    sock.settimeout(30.0)
-                    sock.connect((HOST, PORT))
+                sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+                sock.connect((HOST, PORT))
 
-                # Send file metadata
+                # Send filename length, filename, and output format
                 sock.sendall(str(len(filename)).encode().ljust(4))
                 sock.sendall(filename.encode())
                 sock.sendall(output_format.encode().ljust(8))
-                sock.sendall(str(len(file_bytes)).encode().ljust(16))
 
-                # Upload file using Go-Back-N
-                st.info("Uploading file using Go-Back-N protocol...")
+                # Upload file with progress
+                st.info("Uploading file...")
                 upload_bar = st.progress(0)
-                upload_start = time.time()
-                
-                success = send_with_gobackn(sock, file_bytes, upload_bar)
-                upload_end = time.time()
-                
-                if not success:
-                    st.error("Upload failed!")
-                    sock.close()
-                    return
+                send_with_progress(sock, file_bytes, upload_bar)
 
-                st.info(f"Upload completed in {upload_end - upload_start:.2f}s")
-                st.info("Converting file... Please wait.")
-
-                # Check conversion status
-                sock.settimeout(60.0)  # Give server time to convert
+                # Receive server response
+                sock.settimeout(TIMEOUT)
                 response = sock.recv(2)
-                if response != b"OK":
+                if response == b"CV":
+                    st.error("Conversion failed on server. File may be corrupted or unsupported.")
+                    return
+                elif response == b"ER":
+                    st.error("Transfer failed. Server may have encountered an error.")
+                    return
+                elif response != b"OK":
                     st.error("Conversion failed. Server may not support this format.")
-                    sock.close()
                     return
 
-                # Get converted file info
-                name_len = int(sock.recv(4).decode().strip())
+                # Receive converted filename and size
+                name_len_data = sock.recv(4)
+                if len(name_len_data) != 4:
+                    st.error("Failed to receive converted filename length.")
+                    return
+                name_len = int(name_len_data.decode().strip())
                 converted_name = sock.recv(name_len).decode()
-                converted_size = int(sock.recv(16).decode().strip())
 
-                st.info(f"Downloading {converted_name} ({converted_size:,} bytes)")
+                size_data = sock.recv(16)
+                if len(size_data) != 16:
+                    st.error("Failed to receive converted file size.")
+                    return
+                converted_size = int(size_data.decode().strip())
+
+                # Receive converted file with progress
+                st.info("Downloading converted file...")
                 download_bar = st.progress(0)
-                download_start = time.time()
-                
-                # Download converted file using Go-Back-N
-                converted_bytes = receive_with_gobackn(sock, converted_size, download_bar)
-                download_end = time.time()
+                converted_bytes = receive_with_progress(sock, converted_size, download_bar)
 
-                if len(converted_bytes) == 0:
-                    st.error("Download failed - no data received")
-                    sock.close()
+                # Verify received file size
+                if len(converted_bytes) != converted_size:
+                    st.error(f"File size mismatch: expected {converted_size}, received {len(converted_bytes)}")
                     return
 
-                # Get timing info
-                try:
-                    upload_time_server = float(sock.recv(16).decode().strip())
-                    download_time_server = float(sock.recv(16).decode().strip())
-                except:
-                    upload_time_server = upload_end - upload_start
-                    download_time_server = download_end - download_start
-                
-                # Close connection
-                sock.close()
+                # Display download button
+                st.success("File converted successfully!")
+                mime_type = "application/pdf" if output_format == "pdf" else "application/octet-stream"
+                st.download_button(
+                    label="Download Converted File",
+                    data=converted_bytes,
+                    file_name=converted_name,
+                    mime=mime_type
+                )
 
-                # Store result in session state
-                st.session_state.converted_file = {
-                    'data': converted_bytes,
-                    'name': converted_name
-                }
-                st.session_state.conversion_complete = True
-                
-                st.success("🎉 Conversion successful!")
-                st.write(f"📤 Upload time: {upload_time_server:.2f}s")
-                st.write(f"📥 Download time: {download_time_server:.2f}s")
-                st.write(f"📄 File size: {len(converted_bytes):,} bytes")
-                
-                # Force UI refresh to show download button
-                st.rerun()
+                # Receive and display timing information
+                upload_time_data = sock.recv(16)
+                download_time_data = sock.recv(16)
+                if len(upload_time_data) == 16 and len(download_time_data) == 16:
+                    upload_time = float(upload_time_data.decode().strip())
+                    download_time = float(download_time_data.decode().strip())
+                    st.write(f"Upload time: {upload_time:.4f} seconds")
+                    st.write(f"Download time: {download_time:.4f} seconds")
+                else:
+                    st.warning("Failed to receive timing information from server.")
 
             except socket.timeout:
-                st.error("Connection timeout. Please try again.")
+                st.error("Connection timed out. Please try again.")
             except Exception as e:
                 st.error(f"Connection failed: {e}")
-                print(f"Error details: {e}")
-
-    # Show download button if conversion is complete
-    if st.session_state.conversion_complete and st.session_state.converted_file:
-        st.success("✅ Your file is ready for download!")
-        st.download_button(
-            label="📥 Download Converted File",
-            data=st.session_state.converted_file['data'],
-            file_name=st.session_state.converted_file['name'],
-            mime='application/octet-stream',
-            key="download_converted_file"
-        )
+            finally:
+                if sock:
+                    try:
+                        # sock.close()
+                        print("kireee")
+                    except:
+                        pass
+                    print("[CLIENT] Socket closed.")
 
 if __name__ == "__main__":
     main()
