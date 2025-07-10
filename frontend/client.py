@@ -19,6 +19,48 @@ ALLOWED_CONVERSIONS = {
     ".xls": ["pdf"],
 }
 
+# def send_with_progress(sock, file_bytes, progress_bar):
+#     total = len(file_bytes)
+#     packet_count = min(100, (total + BUFFER_SIZE - 1) // BUFFER_SIZE)
+#     adjusted_buffer = (total + packet_count - 1) // packet_count if total > BUFFER_SIZE * 100 else BUFFER_SIZE
+#     sock.sendall(str(total).encode().ljust(16))
+
+#     packets = [file_bytes[i:i + adjusted_buffer] for i in range(0, total, adjusted_buffer)]
+#     base = 0
+#     next_seq = 0
+#     sent_bytes = 0
+
+#     while base < len(packets):
+#         while next_seq < min(base + WINDOW_SIZE, len(packets)):
+#             sock.sendall(struct.pack('!I', next_seq))
+#             sock.sendall(packets[next_seq])
+#             print(f"[SEND] Sent packet {next_seq}")
+#             sent_bytes = min((next_seq + 1) * adjusted_buffer, total)
+#             progress_bar.progress(sent_bytes / total)
+#             next_seq += 1
+
+#         sock.settimeout(TIMEOUT)
+#         try:
+#             ack_data = sock.recv(4)
+#             if len(ack_data) != 4:
+#                 print(f"[SEND] Incomplete ACK received, len={len(ack_data)}")
+#                 next_seq = base
+#                 continue
+#             ack = struct.unpack('!I', ack_data)[0]
+#             print(f"[SEND] Received ACK {ack}")
+#             if ack >= base:
+#                 base = ack + 1
+#                 progress_bar.progress(min((base * adjusted_buffer) / total, 1.0))
+#         except socket.timeout:
+#             print(f"[SEND] Timeout, resending from {base}")
+#             next_seq = base
+#             continue
+#         except Exception as e:
+#             print(f"[SEND] Error receiving ACK: {e}")
+#             next_seq = base
+#             continue
+#     progress_bar.progress(1.0)
+
 def send_with_progress(sock, file_bytes, progress_bar):
     total = len(file_bytes)
     packet_count = min(100, (total + BUFFER_SIZE - 1) // BUFFER_SIZE)
@@ -29,37 +71,46 @@ def send_with_progress(sock, file_bytes, progress_bar):
     base = 0
     next_seq = 0
     sent_bytes = 0
+    last_ack_time = time.time()
 
     while base < len(packets):
+        # Send packets in the window
         while next_seq < min(base + WINDOW_SIZE, len(packets)):
             sock.sendall(struct.pack('!I', next_seq))
             sock.sendall(packets[next_seq])
             print(f"[SEND] Sent packet {next_seq}")
-            sent_bytes = min((next_seq + 1) * adjusted_buffer, total)
-            progress_bar.progress(sent_bytes / total)
             next_seq += 1
 
-        sock.settimeout(TIMEOUT)
+        # Wait for ACK
         try:
+            sock.settimeout(TIMEOUT)
             ack_data = sock.recv(4)
             if len(ack_data) != 4:
                 print(f"[SEND] Incomplete ACK received, len={len(ack_data)}")
                 next_seq = base
                 continue
+
             ack = struct.unpack('!I', ack_data)[0]
             print(f"[SEND] Received ACK {ack}")
+
             if ack >= base:
                 base = ack + 1
                 progress_bar.progress(min((base * adjusted_buffer) / total, 1.0))
+                last_ack_time = time.time()
+
         except socket.timeout:
-            print(f"[SEND] Timeout, resending from {base}")
+            # Timeout → resend entire window
+            print(f"[SEND] Timeout waiting for ACK. Resending from {base}")
             next_seq = base
             continue
-        except Exception as e:
-            print(f"[SEND] Error receiving ACK: {e}")
+
+        # Extra protection: detect stalled ACKs (simulate triple-duplicate ACKs if needed)
+        if time.time() - last_ack_time > TIMEOUT:
+            print(f"[SEND] ACK stalled. Resending from {base}")
             next_seq = base
-            continue
-    progress_bar.progress(1.0)
+            last_ack_time = time.time()
+
+
 
 def receive_with_progress(sock, filesize, progress_bar):
     packet_count = min(100, (filesize + BUFFER_SIZE - 1) // BUFFER_SIZE)

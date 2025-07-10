@@ -64,6 +64,109 @@ def send_with_progress(conn, file_path):
             next_seq = base
             continue
 
+# def receive_with_progress(conn, dest_path):
+#     filesize_data = conn.recv(16)
+#     if len(filesize_data) != 16:
+#         raise ValueError(f"Invalid filesize data, received {len(filesize_data)} bytes")
+#     filesize = int(filesize_data.decode().strip())
+#     packet_count = min(100, (filesize + BUFFER_SIZE - 1) // BUFFER_SIZE)
+#     adjusted_buffer = (filesize + packet_count - 1) // packet_count if filesize > BUFFER_SIZE * 100 else BUFFER_SIZE
+#     print(f"[RECV] Expecting {packet_count} ACKs for {dest_path}, filesize={filesize}")
+
+#     expected_seq = 0
+#     received = 0
+#     with open(dest_path, 'wb') as f:
+#         while received < filesize:
+#             conn.settimeout(TIMEOUT)
+#             try:
+#                 seq_data = conn.recv(4)
+#                 if len(seq_data) != 4:
+#                     print(f"[RECV] Incomplete sequence number, len={len(seq_data)}")
+#                     conn.sendall(struct.pack('!I', expected_seq - 1))
+#                     continue
+#                 seq = struct.unpack('!I', seq_data)[0]
+#                 data = conn.recv(adjusted_buffer)
+#                 if len(data) == 0:
+#                     print(f"[RECV] No data received for packet {seq}")
+#                     conn.sendall(struct.pack('!I', expected_seq - 1))
+#                     continue
+#                 if seq == expected_seq:
+#                     f.write(data)
+#                     received += len(data)
+#                     conn.sendall(struct.pack('!I', expected_seq))
+#                     print(f"[RECV] Received packet {seq}, sent ACK {expected_seq}, bytes={len(data)}")
+#                     expected_seq += 1
+#                 else:
+#                     conn.sendall(struct.pack('!I', expected_seq - 1))
+#                     print(f"[RECV] Out-of-order packet {seq}, sent ACK {expected_seq - 1}")
+#             except socket.timeout:
+#                 conn.sendall(struct.pack('!I', expected_seq - 1))
+#                 print(f"[RECV] Timeout, sent ACK {expected_seq - 1}")
+#                 continue
+#             except Exception as e:
+#                 print(f"[RECV] Error: {e}")
+#                 conn.sendall(struct.pack('!I', expected_seq - 1))
+#                 continue
+#     return filesize
+
+# def receive_with_progress(conn, dest_path):
+#     filesize_data = conn.recv(16)
+#     if len(filesize_data) != 16:
+#         raise ValueError(f"Invalid filesize data, received {len(filesize_data)} bytes")
+#     filesize = int(filesize_data.decode().strip())
+#     packet_count = min(100, (filesize + BUFFER_SIZE - 1) // BUFFER_SIZE)
+#     adjusted_buffer = (filesize + packet_count - 1) // packet_count if filesize > BUFFER_SIZE * 100 else BUFFER_SIZE
+#     print(f"[RECV] Expecting {packet_count} ACKs for {dest_path}, filesize={filesize}")
+
+#     expected_seq = 0
+#     received = 0
+#     buffer = {}
+
+#     with open(dest_path, 'wb') as f:
+#         while received < filesize:
+#             conn.settimeout(TIMEOUT)
+#             try:
+#                 seq_data = conn.recv(4)
+#                 if len(seq_data) != 4:
+#                     print(f"[RECV] Incomplete sequence number, len={len(seq_data)}")
+#                     conn.sendall(struct.pack('!I', expected_seq - 1))
+#                     continue
+#                 seq = struct.unpack('!I', seq_data)[0]
+#                 data = conn.recv(adjusted_buffer)
+#                 if len(data) == 0:
+#                     print(f"[RECV] No data received for packet {seq}")
+#                     conn.sendall(struct.pack('!I', expected_seq - 1))
+#                     continue
+
+#                 if seq == expected_seq:
+#                     buffer[seq] = data
+#                     # Simulate lost ACKs for seq 10 and 50
+#                     if seq in [10, 50]:
+#                         print(f"[RECV] Simulated ACK loss for {seq}")
+#                         # Do not send ACK
+#                     else:
+#                         conn.sendall(struct.pack('!I', expected_seq))
+#                         print(f"[RECV] Received packet {seq}, sent ACK {expected_seq}, bytes={len(data)}")
+#                         # Write in-order confirmed packets
+#                         while expected_seq in buffer:
+#                             f.write(buffer[expected_seq])
+#                             received += len(buffer[expected_seq])
+#                             del buffer[expected_seq]
+#                             expected_seq += 1
+#                 else:
+#                     # Out-of-order or duplicate
+#                     conn.sendall(struct.pack('!I', expected_seq - 1))
+#                     print(f"[RECV] Out-of-order packet {seq}, sent ACK {expected_seq - 1}")
+#             except socket.timeout:
+#                 conn.sendall(struct.pack('!I', expected_seq - 1))
+#                 print(f"[RECV] Timeout, sent ACK {expected_seq - 1}")
+#                 continue
+#             except Exception as e:
+#                 print(f"[RECV] Error: {e}")
+#                 conn.sendall(struct.pack('!I', expected_seq - 1))
+#                 continue
+#     return filesize
+
 def receive_with_progress(conn, dest_path):
     filesize_data = conn.recv(16)
     if len(filesize_data) != 16:
@@ -75,6 +178,10 @@ def receive_with_progress(conn, dest_path):
 
     expected_seq = 0
     received = 0
+    buffer = {}
+    ack10_lost_once = False
+    ack50_lost_once = False
+
     with open(dest_path, 'wb') as f:
         while received < filesize:
             conn.settimeout(TIMEOUT)
@@ -84,21 +191,42 @@ def receive_with_progress(conn, dest_path):
                     print(f"[RECV] Incomplete sequence number, len={len(seq_data)}")
                     conn.sendall(struct.pack('!I', expected_seq - 1))
                     continue
+
                 seq = struct.unpack('!I', seq_data)[0]
                 data = conn.recv(adjusted_buffer)
                 if len(data) == 0:
                     print(f"[RECV] No data received for packet {seq}")
                     conn.sendall(struct.pack('!I', expected_seq - 1))
                     continue
+
                 if seq == expected_seq:
-                    f.write(data)
-                    received += len(data)
-                    conn.sendall(struct.pack('!I', expected_seq))
-                    print(f"[RECV] Received packet {seq}, sent ACK {expected_seq}, bytes={len(data)}")
-                    expected_seq += 1
+                    buffer[seq] = data
+
+                    # Simulate ACK loss for 10 and 50 only once
+                    if seq == 10 and not ack10_lost_once:
+                        print(f"[RECV] Simulated ACK loss for {seq}")
+                        ack10_lost_once = True
+                        continue  # skip ACK
+                    elif seq == 50 and not ack50_lost_once:
+                        print(f"[RECV] Simulated ACK loss for {seq}")
+                        ack50_lost_once = True
+                        continue  # skip ACK
+                    else:
+                        conn.sendall(struct.pack('!I', expected_seq))
+                        print(f"[RECV] Received packet {seq}, sent ACK {expected_seq}, bytes={len(data)}")
+
+                        # Write confirmed, in-order packets
+                        while expected_seq in buffer:
+                            f.write(buffer[expected_seq])
+                            received += len(buffer[expected_seq])
+                            del buffer[expected_seq]
+                            expected_seq += 1
+
                 else:
+                    # Out-of-order or early packet, re-ACK last confirmed
                     conn.sendall(struct.pack('!I', expected_seq - 1))
                     print(f"[RECV] Out-of-order packet {seq}, sent ACK {expected_seq - 1}")
+
             except socket.timeout:
                 conn.sendall(struct.pack('!I', expected_seq - 1))
                 print(f"[RECV] Timeout, sent ACK {expected_seq - 1}")
@@ -107,7 +235,9 @@ def receive_with_progress(conn, dest_path):
                 print(f"[RECV] Error: {e}")
                 conn.sendall(struct.pack('!I', expected_seq - 1))
                 continue
+
     return filesize
+
 
 def handle_client(conn, addr):
     print(f"[NEW CONNECTION] {addr} connected.")
