@@ -389,34 +389,43 @@ def send_with_ack(sock, file_bytes, progress_bar, status_text):
                 try:
                     sock.sendall(packet_header)
                     sock.sendall(data)
+                    print(f"[CLIENT] Sent Packet {seq_num} | Size: {len(data)} bytes | Attempt {retry_count + 1}")
                     status_text.text(f"Sending packet {seq_num + 1}/{total_packets} (Attempt {retry_count + 1})")
                     
                     ack_received = receive_ack(sock, seq_num)
                     if ack_received:
+                        print(f"[CLIENT] Received ACK for Packet {seq_num}")
                         offset += len(data)
                         seq_num += 1
                         progress_bar.progress(offset / total_size)
                         break
                     else:
                         retry_count += 1
+                        print(f"[CLIENT] Retrying Packet {seq_num} | Attempt {retry_count + 1}")
                         if retry_count < MAX_RETRIES:
                             status_text.text(f"Retrying packet {seq_num + 1}, attempt {retry_count + 1}")
                 except Exception as e:
                     retry_count += 1
+                    print(f"[CLIENT] Error sending Packet {seq_num}: {e}")
                     status_text.text(f"Error sending packet {seq_num}: {e}")
             
             if not ack_received:
+                print(f"[CLIENT] Failed to send Packet {seq_num} after {MAX_RETRIES} attempts")
                 status_text.text(f"Failed to send packet {seq_num} after {MAX_RETRIES} attempts")
                 return False
         
         end_packet = (0xFFFFFFFF).to_bytes(4, byteorder='big') + (0).to_bytes(4, byteorder='big')
         sock.sendall(end_packet)
         status_text.text("Upload completed successfully!")
+        print("[CLIENT] Upload completed successfully!")
         progress_bar.progress(1.0)
         return True
     except Exception as e:
         status_text.text(f"Upload failed: {e}")
+        print(f"[CLIENT] Upload failed: {e}")
         return False
+
+
 
 def receive_with_ack(sock, progress_bar, status_text):
     """Receive file with packet-by-packet ACK system"""
@@ -426,10 +435,12 @@ def receive_with_ack(sock, progress_bar, status_text):
         while len(filesize_data) < 16:
             if time.time() - start_time > TIMEOUT:
                 status_text.text("Timeout receiving file size")
+                print(f"[CLIENT] Timeout receiving file size")
                 return b''
             chunk = sock.recv(16 - len(filesize_data))
             if not chunk:
                 status_text.text("Connection closed while receiving file size")
+                print(f"[CLIENT] Connection closed while receiving file size")
                 return b''
             filesize_data += chunk
         
@@ -447,10 +458,12 @@ def receive_with_ack(sock, progress_bar, status_text):
             while len(header) < PACKET_HEADER_SIZE:
                 if time.time() - start_time > TIMEOUT:
                     status_text.text("Timeout receiving packet header")
+                    print(f"[CLIENT] Timeout receiving packet header")
                     break
                 chunk = sock.recv(PACKET_HEADER_SIZE - len(header))
                 if not chunk:
                     status_text.text("Connection closed while receiving header")
+                    print(f"[CLIENT] Connection closed while receiving header")
                     return b''.join(data_chunks)
                 header += chunk
             
@@ -462,6 +475,7 @@ def receive_with_ack(sock, progress_bar, status_text):
             
             if seq_num == 0xFFFFFFFF and data_len == 0:
                 status_text.text("Download completed successfully!")
+                print("[CLIENT] Download completed successfully!")
                 break
             
             data = b''
@@ -469,37 +483,44 @@ def receive_with_ack(sock, progress_bar, status_text):
             while len(data) < data_len:
                 if time.time() - start_time > TIMEOUT:
                     status_text.text(f"Timeout receiving data for packet {seq_num}")
+                    print(f"[CLIENT] Timeout receiving data for packet {seq_num}")
                     break
                 chunk = sock.recv(data_len - len(data))
                 if not chunk:
                     status_text.text(f"Connection closed while receiving data for packet {seq_num}")
+                    print(f"[CLIENT] Connection closed while receiving data for packet {seq_num}")
                     break
                 data += chunk
             
             if len(data) != data_len:
                 status_text.text(f"Data length mismatch: expected {data_len}, got {len(data)}")
+                print(f"[CLIENT] Data length mismatch: expected {data_len}, got {len(data)}")
                 send_ack(sock, expected_seq - 1 if expected_seq > 0 else 0)
                 continue
             
             status_text.text(f"Receiving packet {seq_num + 1}/{total_packets}")
+            print(f"[CLIENT] Receiving Packet {seq_num} | Size: {len(data)} bytes")
             
             if seq_num == expected_seq:
                 data_chunks.append(data)
                 received_bytes += len(data)
                 if not send_ack(sock, seq_num):
                     status_text.text(f"Failed to send ACK for packet {seq_num}")
+                    print(f"[CLIENT] Failed to send ACK for packet {seq_num}")
                     break
                 expected_seq += 1
                 if filesize > 0:
                     progress_bar.progress(received_bytes / filesize)
             else:
                 status_text.text(f"Sequence error: expected {expected_seq}, got {seq_num}")
+                print(f"[CLIENT] Sequence error: expected {expected_seq}, got {seq_num}")
                 send_ack(sock, expected_seq - 1 if expected_seq > 0 else 0)
         
         progress_bar.progress(1.0)
         return b''.join(data_chunks)
     except Exception as e:
         status_text.text(f"Download failed: {e}")
+        print(f"[CLIENT] Download failed: {e}")
         return b''
 
 
@@ -736,7 +757,7 @@ def main():
                 upload_status = st.empty()
 
                 upload_success = send_with_ack(sock, file_bytes, upload_progress, upload_status)
-
+                # upload_success = send_with_ack(sock, file_bytes)
                 if not upload_success:
                     st.error("Upload failed!")
                     return
