@@ -503,16 +503,194 @@ def receive_with_ack(sock, progress_bar, status_text):
         return b''
 
 
+# def main():
+
+
+#     st.title("📄 Multi-Format File Converter (Enhanced with Packet ACK)")
+    
+#     # Display protocol information
+#     with st.expander("📊 Protocol Information"):
+#         st.write(f"**Packet Size:** {BUFFER_SIZE} bytes")
+#         st.write(f"**Max Retries:** {MAX_RETRIES}")
+#         st.write(f"**Timeout:** {TIMEOUT} seconds")
+#         st.write(f"**Server:** {HOST}:{PORT}")
+    
+#     uploaded_file = st.file_uploader("Upload your file", type=list(ALLOWED_CONVERSIONS.keys()))
+
+#     output_format = None
+#     if uploaded_file:
+#         file_ext = os.path.splitext(uploaded_file.name)[1].lower()
+#         allowed_outputs = ALLOWED_CONVERSIONS.get(file_ext, [])
+
+#         if not allowed_outputs:
+#             st.error("Unsupported file type.")
+#             return
+#         else:
+#             output_format = st.selectbox("Select output format", allowed_outputs)
+
+#     if uploaded_file and output_format:
+#         filename = uploaded_file.name
+#         file_bytes = uploaded_file.read()
+        
+#         st.info(f"📄  **File:** {filename}")
+#         st.info(f"📏  **Size:** {len(file_bytes):,} bytes")
+#         st.info(f"🔄 **Converting to:** {output_format.upper()}")
+        
+#         # Calculate expected packets
+#         expected_packets = (len(file_bytes) + BUFFER_SIZE - 1) // BUFFER_SIZE
+#         st.info(f"📦 **Expected packets:** {expected_packets}")
+
+#         if st.button("Upload and Convert"):
+#             sock = None
+#             try:
+#                 sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+#                 sock.settimeout(30.0)  # Set overall connection timeout
+#                 sock.connect((HOST, PORT))
+#                 sock.settimeout(None)  # Remove timeout for normal operations
+                
+#                 # Send filename length and name
+#                 filename_len_data = str(len(filename)).encode().ljust(4)
+#                 sock.sendall(filename_len_data)
+#                 sock.sendall(filename.encode())
+
+#                 # Send output format (up to 8 bytes)
+#                 output_format_data = output_format.encode().ljust(8)
+#                 sock.sendall(output_format_data)
+
+#                 # Upload phase
+#                 st.subheader("📤 Upload Progress")
+#                 upload_progress = st.progress(0)
+#                 upload_status = st.empty()
+                
+#                 upload_start = time.time()
+#                 upload_success = send_with_ack(sock, file_bytes, upload_progress, upload_status)
+#                 upload_end = time.time()
+                
+#                 if not upload_success:
+#                     st.error("Upload failed!")
+#                     return
+
+#                 # Wait for conversion response
+#                 st.subheader("⚙️ Conversion Progress")
+#                 conversion_status = st.empty()
+#                 conversion_status.text("Waiting for server response...")
+                
+#                 # Set timeout for server response
+#                 sock.settimeout(600.0)
+#                 response_data = b''
+#                 while len(response_data) < 2:
+#                     chunk = sock.recv(2 - len(response_data))
+#                     if not chunk:
+#                         st.error("Connection closed while waiting for server response")
+#                         return
+#                     response_data += chunk
+#                 sock.settimeout(None)
+                
+#                 if response_data != b"OK":
+#                     st.error(f"Conversion failed. Server response: {response_data}")
+#                     return
+
+#                 conversion_status.text("Conversion completed successfully!")
+
+#                 # Download phase
+#                 st.subheader("📥 Download Progress")
+                
+#                 # Receive filename with better error handling
+#                 name_len_data = b''
+#                 while len(name_len_data) < 4:
+#                     chunk = sock.recv(4 - len(name_len_data))
+#                     if not chunk:
+#                         st.error("Connection closed while receiving filename length")
+#                         return
+#                     name_len_data += chunk
+                
+#                 name_len = int(name_len_data.decode().strip())
+                
+#                 converted_name_data = b''
+#                 while len(converted_name_data) < name_len:
+#                     chunk = sock.recv(name_len - len(converted_name_data))
+#                     if not chunk:
+#                         st.error("Connection closed while receiving filename")
+#                         return
+#                     converted_name_data += chunk
+                
+#                 converted_name = converted_name_data.decode()
+
+#                 download_progress = st.progress(0)
+#                 download_status = st.empty()
+                
+#                 download_start = time.time()
+#                 converted_bytes = receive_with_ack(sock, download_progress, download_status)
+#                 download_end = time.time()
+                
+#                 if not converted_bytes:
+#                     st.error("Failed to receive converted file")
+#                     return
+
+#                 # Receive timing information with better error handling
+#                 timing_data = {}
+#                 timing_labels = ['upload', 'download', 'conversion']
+                
+#                 for label in timing_labels:
+#                     try:
+#                         data = b''
+#                         while len(data) < 16:
+#                             chunk = sock.recv(16 - len(data))
+#                             if not chunk:
+#                                 st.warning(f"Connection closed while receiving {label} timing")
+#                                 break
+#                             data += chunk
+                        
+#                         if len(data) == 16:
+#                             timing_data[label] = float(data.decode().strip())
+#                         else:
+#                             timing_data[label] = 0.0
+#                     except Exception as e:
+#                         st.warning(f"Failed to parse {label} timing: {e}")
+#                         timing_data[label] = 0.0
+
+#                 # Display results
+#                 st.success("ðŸŽ‰ Conversion completed successfully!")
+                
+#                 col1, col2 = st.columns(2)
+#                 with col1:
+#                     st.metric("📤 Upload Time (Client)", f"{upload_end - upload_start:.2f}s")
+#                     st.metric("📤  Download Time (Client)", f"{download_end - download_start:.2f}s")
+#                     st.metric("📦 Total Packets", expected_packets)
+                
+#                 with col2:
+#                     st.metric("📤Upload Time (Server)", f"{timing_data.get('upload', 0):.2f}s")
+#                     st.metric("📤Download Time (Server)", f"{timing_data.get('download', 0):.2f}s")
+#                     st.metric("⚙️ Conversion Time", f"{timing_data.get('conversion', 0):.2f}s")
+
+#                 st.download_button(
+#                     label="💾 Download Converted File",
+#                     data=converted_bytes,
+#                     file_name=converted_name,
+#                     mime='application/octet-stream'
+#                 )
+
+#             except Exception as e:
+#                 st.error(f"❌ Connection failed: {e}")
+#                 import traceback
+#                 st.text(traceback.format_exc())
+#             finally:
+#                 if sock:
+#                     try:
+#                         sock.close()
+#                     except:
+#                         pass
+
 def main():
     st.title("📄 Multi-Format File Converter (Enhanced with Packet ACK)")
-    
+
     # Display protocol information
     with st.expander("📊 Protocol Information"):
         st.write(f"**Packet Size:** {BUFFER_SIZE} bytes")
         st.write(f"**Max Retries:** {MAX_RETRIES}")
         st.write(f"**Timeout:** {TIMEOUT} seconds")
         st.write(f"**Server:** {HOST}:{PORT}")
-    
+
     uploaded_file = st.file_uploader("Upload your file", type=list(ALLOWED_CONVERSIONS.keys()))
 
     output_format = None
@@ -529,12 +707,11 @@ def main():
     if uploaded_file and output_format:
         filename = uploaded_file.name
         file_bytes = uploaded_file.read()
-        
+
         st.info(f"📄  **File:** {filename}")
         st.info(f"📏  **Size:** {len(file_bytes):,} bytes")
         st.info(f"🔄 **Converting to:** {output_format.upper()}")
-        
-        # Calculate expected packets
+
         expected_packets = (len(file_bytes) + BUFFER_SIZE - 1) // BUFFER_SIZE
         st.info(f"📦 **Expected packets:** {expected_packets}")
 
@@ -542,38 +719,33 @@ def main():
             sock = None
             try:
                 sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-                sock.settimeout(30.0)  # Set overall connection timeout
+                sock.settimeout(30.0)
                 sock.connect((HOST, PORT))
-                sock.settimeout(None)  # Remove timeout for normal operations
-                
+                sock.settimeout(None)
+
                 # Send filename length and name
-                filename_len_data = str(len(filename)).encode().ljust(4)
-                sock.sendall(filename_len_data)
+                sock.sendall(str(len(filename)).encode().ljust(4))
                 sock.sendall(filename.encode())
 
-                # Send output format (up to 8 bytes)
-                output_format_data = output_format.encode().ljust(8)
-                sock.sendall(output_format_data)
+                # Send output format
+                sock.sendall(output_format.encode().ljust(8))
 
-                # Upload phase
+                # Upload
                 st.subheader("📤 Upload Progress")
                 upload_progress = st.progress(0)
                 upload_status = st.empty()
-                
-                upload_start = time.time()
+
                 upload_success = send_with_ack(sock, file_bytes, upload_progress, upload_status)
-                upload_end = time.time()
-                
+
                 if not upload_success:
                     st.error("Upload failed!")
                     return
 
-                # Wait for conversion response
+                # Wait for server response
                 st.subheader("⚙️ Conversion Progress")
                 conversion_status = st.empty()
                 conversion_status.text("Waiting for server response...")
-                
-                # Set timeout for server response
+
                 sock.settimeout(600.0)
                 response_data = b''
                 while len(response_data) < 2:
@@ -583,17 +755,15 @@ def main():
                         return
                     response_data += chunk
                 sock.settimeout(None)
-                
+
                 if response_data != b"OK":
                     st.error(f"Conversion failed. Server response: {response_data}")
                     return
 
                 conversion_status.text("Conversion completed successfully!")
 
-                # Download phase
+                # Download
                 st.subheader("📥 Download Progress")
-                
-                # Receive filename with better error handling
                 name_len_data = b''
                 while len(name_len_data) < 4:
                     chunk = sock.recv(4 - len(name_len_data))
@@ -601,9 +771,9 @@ def main():
                         st.error("Connection closed while receiving filename length")
                         return
                     name_len_data += chunk
-                
+
                 name_len = int(name_len_data.decode().strip())
-                
+
                 converted_name_data = b''
                 while len(converted_name_data) < name_len:
                     chunk = sock.recv(name_len - len(converted_name_data))
@@ -611,55 +781,19 @@ def main():
                         st.error("Connection closed while receiving filename")
                         return
                     converted_name_data += chunk
-                
+
                 converted_name = converted_name_data.decode()
 
                 download_progress = st.progress(0)
                 download_status = st.empty()
-                
-                download_start = time.time()
                 converted_bytes = receive_with_ack(sock, download_progress, download_status)
-                download_end = time.time()
-                
+
                 if not converted_bytes:
                     st.error("Failed to receive converted file")
                     return
 
-                # Receive timing information with better error handling
-                # timing_data = {}
-                # timing_labels = ['upload', 'download', 'conversion']
-                
-                # for label in timing_labels:
-                #     try:
-                #         data = b''
-                #         while len(data) < 16:
-                #             chunk = sock.recv(16 - len(data))
-                #             if not chunk:
-                #                 st.warning(f"Connection closed while receiving {label} timing")
-                #                 break
-                #             data += chunk
-                        
-                #         if len(data) == 16:
-                #             timing_data[label] = float(data.decode().strip())
-                #         else:
-                #             timing_data[label] = 0.0
-                #     except Exception as e:
-                #         st.warning(f"Failed to parse {label} timing: {e}")
-                #         timing_data[label] = 0.0
-
-                # Display results
-                st.success("ðŸŽ‰ Conversion completed successfully!")
-                
-                # col1, col2 = st.columns(2)
-                # with col1:
-                #     st.metric("📤 Upload Time (Client)", f"{upload_end - upload_start:.2f}s")
-                #     st.metric("📤  Download Time (Client)", f"{download_end - download_start:.2f}s")
-                #     st.metric("📦 Total Packets", expected_packets)
-                
-                # with col2:
-                #     st.metric("📤Upload Time (Server)", f"{timing_data.get('upload', 0):.2f}s")
-                #     st.metric("📤Download Time (Server)", f"{timing_data.get('download', 0):.2f}s")
-                #     st.metric("⚙️ Conversion Time", f"{timing_data.get('conversion', 0):.2f}s")
+                # Success message only
+                st.success("🎉 Conversion completed successfully!")
 
                 st.download_button(
                     label="💾 Download Converted File",
@@ -678,6 +812,7 @@ def main():
                         sock.close()
                     except:
                         pass
+
 
 if __name__ == "__main__":
     main()
