@@ -1,11 +1,13 @@
 # FileFusion
 
-FileFusion is a computer networking project that provides file conversion capabilities through a client-server architecture. The application consists of a Python backend server and a Streamlit frontend client for seamless file processing.
+FileFusion is a computer networking project that provides file conversion capabilities through a client-server architecture. The application consists of a Python backend server and a Streamlit frontend client for seamless file processing. It is our Computer Networking course (CSE-3111) project.
 
 ## Features
 
 - File conversion functionality
 - Client-server architecture
+- ACK based transmission
+- Selective Repeat 
 - Python-based backend server
 - Streamlit web interface
 - Real-time file processing
@@ -44,8 +46,8 @@ Before running FileFusion, ensure you have the following installed:
 FileFusion/
 ├── backend/
 │   ├── server.py
-    ├── converter.py
-    └── requirements.txt
+|    ├── converter.py
+|    └── requirements.txt
 ├── frontend/
 │   ├── client.py
 │   └── requirements.txt
