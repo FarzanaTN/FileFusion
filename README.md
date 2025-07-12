@@ -23,4 +23,6 @@ pip install -r requirements.txt
 streamlit run client.py
 
 
-docker build -t filefusion-backend .
+(venv) PS D:\networking_project\FileFusion\frontend> cd .\static_downloads\
+ python -m http.server 8000
+

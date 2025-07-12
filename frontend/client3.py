@@ -1,159 +1,23 @@
-# import socket
-# import streamlit as st
-# import time
-# import os
-
-# HOST = '127.0.0.1'
-# PORT = 65432
-# BUFFER_SIZE = 4096
-# PACKET_HEADER_SIZE = 8
-# TIMEOUT = 5.0
-# WINDOW_SIZE = 5
-
-# def send_ack(sock, ack_num):
-#     sock.sendall(ack_num.to_bytes(4, 'big'))
-#     print(f"[CLIENT] Sent ACK {ack_num}")
-
-# def receive_ack(sock):
-#     ack_data = b''
-#     while len(ack_data) < 4:
-#         ack_data += sock.recv(4 - len(ack_data))
-#     return int.from_bytes(ack_data, 'big')
-
-# def send_with_ack(sock, file_bytes, progress_bar, status_text):
-#     total_size = len(file_bytes)
-#     total_packets = (total_size + BUFFER_SIZE - 1) // BUFFER_SIZE
-
-#     sock.sendall(str(total_size).encode().ljust(16))
-#     status_text.text(f"Sent file size: {total_size}")
-
-#     base = 0
-#     next_seq = 0
-#     buffer = {}
-#     sock.settimeout(TIMEOUT)
-
-#     while base < total_packets:
-#         while next_seq < base + WINDOW_SIZE and next_seq < total_packets:
-#             start = next_seq * BUFFER_SIZE
-#             end = min(start + BUFFER_SIZE, total_size)
-#             data = file_bytes[start:end]
-#             header = next_seq.to_bytes(4, 'big') + len(data).to_bytes(4, 'big')
-#             packet = header + data
-#             buffer[next_seq] = packet
-#             sock.sendall(packet)
-#             print(f"[CLIENT] Sent Packet {next_seq}")
-#             next_seq += 1
-
-#         try:
-#             ack_num = receive_ack(sock)
-#             print(f"[CLIENT] Got cumulative ACK {ack_num}")
-#             if ack_num >= base:
-#                 base = ack_num + 1
-#                 progress_bar.progress(min(base / total_packets, 1.0))
-#         except socket.timeout:
-#             status_text.text(f"Timeout! Resending from {base}")
-#             print(f"[CLIENT] Timeout. Resending from {base}")
-#             for seq in range(base, next_seq):
-#                 sock.sendall(buffer[seq])
-
-#     sock.sendall((0xFFFFFFFF).to_bytes(4, 'big') + (0).to_bytes(4, 'big'))
-#     status_text.text("Upload complete!")
-#     progress_bar.progress(1.0)
-#     return True
-
-# def receive_with_ack(sock, progress_bar, status_text):
-#     filesize = int(sock.recv(16).decode().strip())
-#     buffer = {}
-#     expected_seq = 0
-#     received_bytes = 0
-
-#     while received_bytes < filesize:
-#         header = sock.recv(PACKET_HEADER_SIZE)
-#         seq_num = int.from_bytes(header[:4], 'big')
-#         data_len = int.from_bytes(header[4:], 'big')
-
-#         if seq_num == 0xFFFFFFFF and data_len == 0:
-#             break
-
-#         data = b''
-#         while len(data) < data_len:
-#             data += sock.recv(data_len - len(data))
-
-#         buffer[seq_num] = data
-
-#         if seq_num == expected_seq:
-#             while expected_seq in buffer:
-#                 expected_seq += 1
-#         send_ack(sock, expected_seq - 1)
-#         received_bytes += len(data)
-#         progress_bar.progress(min(received_bytes / filesize, 1.0))
-
-#     data_bytes = b''.join(buffer[seq] for seq in sorted(buffer))
-#     return data_bytes
-
-# def main():
-#     st.title("📄 Selective Repeat File Converter")
-
-#     uploaded_file = st.file_uploader("Upload your file", type=[".doc", ".docx", ".odt", ".pptx", ".xls", ".xlsx"])
-#     if uploaded_file:
-#         output_format = st.selectbox("Select output format", ["pdf", "docx", "odt"])
-
-#         if st.button("Upload and Convert"):
-#             filename = uploaded_file.name
-#             file_bytes = uploaded_file.read()
-
-#             with st.spinner("Connecting to server..."):
-#                 sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-#                 sock.connect((HOST, PORT))
-
-#                 sock.sendall(str(len(filename)).encode().ljust(4))
-#                 sock.sendall(filename.encode())
-#                 sock.sendall(output_format.encode().ljust(8))
-
-#             st.subheader("📤 Upload Progress")
-#             upload_bar = st.progress(0)
-#             upload_status = st.empty()
-#             success = send_with_ack(sock, file_bytes, upload_bar, upload_status)
-#             if not success:
-#                 st.error("Upload failed")
-#                 return
-
-#             st.subheader("⚙️ Waiting for Conversion")
-#             sock.settimeout(600.0)
-#             response = sock.recv(2)
-#             if response != b"OK":
-#                 st.error("Conversion failed on server")
-#                 return
-
-#             st.subheader("📥 Download Progress")
-#             name_len = int(sock.recv(4).decode().strip())
-#             converted_name = sock.recv(name_len).decode()
-
-#             download_bar = st.progress(0)
-#             download_status = st.empty()
-#             converted_data = receive_with_ack(sock, download_bar, download_status)
-
-#             st.success("🎉 Conversion Complete!")
-#             st.download_button("💾 Download", data=converted_data, file_name=converted_name)
-#             sock.close()
-
-# if __name__ == "__main__":
-#     main()
-
-
-
 import socket
 import streamlit as st
 import time
 import os
 from collections import defaultdict
+import qrcode
+from io import BytesIO
+from urllib.parse import quote
 
+
+# Configuration
 HOST = '127.0.0.1'
 PORT = 65432
 BUFFER_SIZE = 4096
 PACKET_HEADER_SIZE = 8
 TIMEOUT = 50.0
 WINDOW_SIZE = 5
+STATIC_DIR = "static_downloads"
+
+os.makedirs(STATIC_DIR, exist_ok=True)
 
 def send_ack(sock, ack_num):
     sock.sendall(ack_num.to_bytes(4, 'big'))
@@ -270,6 +134,19 @@ def receive_with_ack(sock, progress_bar, status_text):
 
     data_bytes = b''.join(buffer[seq] for seq in sorted(buffer))
     return data_bytes
+
+
+# QR code generation
+def generate_qr_code(url):
+    qr = qrcode.QRCode(version=1, box_size=8, border=2)
+    qr.add_data(url)
+    qr.make(fit=True)
+    img = qr.make_image(fill_color="black", back_color="white")
+    buf = BytesIO()
+    img.save(buf, format='PNG')
+    buf.seek(0)
+    return buf
+
 
 def main():
     st.title("📄 Multi-Format File Converter (Selective Repeat with Packet ACK)")
@@ -391,6 +268,41 @@ def main():
                     mime='application/octet-stream'
                 )
 
+                # NEW: Share option added after download button
+                with st.expander("📲 Share via QR code on local network"):
+                    st.markdown(
+                        "✅ To share over LAN, run this in terminal (in static_downloads folder):\n"
+                        "```\n"
+                        "cd static_downloads\n"
+                        "python -m http.server 8000\n"
+                        "```\n"
+                        "Then enter your computer's LAN IP below (same network)."
+                    )
+
+                    # Save the file to static_downloads
+                    os.makedirs("static_downloads", exist_ok=True)
+                    shared_path = os.path.join("static_downloads", converted_name)
+                    with open(shared_path, "wb") as f:
+                        f.write(converted_data)
+
+                    # lan_ip = st.text_input("Enter your computer's LAN IP:", "192.168.0.108")
+                    # share_url = f"http://{lan_ip}:8000/{converted_name}"
+
+                    # st.markdown(f"🔗 **Direct Link:** [{share_url}]({share_url})")
+
+                    # qr_buf = generate_qr_code(share_url)
+                    # st.image(qr_buf, caption="Scan this QR on your phone to download", use_container_width=False)
+
+                    lan_ip = st.text_input("Enter your computer's LAN IP:", "192.168.0.108")
+                    from urllib.parse import quote
+                    encoded_name = quote(converted_name)
+                    share_url = f"http://{lan_ip}:8000/{encoded_name}"
+
+                    st.markdown(f"🔗 **Direct Link:** [{share_url}]({share_url})")
+
+                    qr_buf = generate_qr_code(share_url)
+                    st.image(qr_buf, caption="Scan this QR on your phone to download", use_container_width=False)
+
             except Exception as e:
                 st.error(f"❌ Connection failed: {e}")
                 import traceback
@@ -401,6 +313,7 @@ def main():
                         sock.close()
                     except:
                         pass
+
 
 if __name__ == "__main__":
     main()
