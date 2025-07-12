@@ -1,26 +1,134 @@
-FileFusion
+# FileFusion
 
+FileFusion is a computer networking project that provides file conversion capabilities through a client-server architecture. The application consists of a Python backend server and a Streamlit frontend client for seamless file processing.
 
-docker run -p 65432:65432 -v "${PWD}\uploads:/app/uploads" -v "${PWD}\converted:/app/converted" filefusion-backend
+## Features
 
+- File conversion functionality
+- Client-server architecture
+- Python-based backend server
+- Streamlit web interface
+- Real-time file processing
 
-cd backend
-python -m venv venv
-venv\Scripts\activate  # On Windows
-# source venv/bin/activate  # On Linux/Mac
+## Prerequisites
 
-venv\Scripts\activate
-python server.py
+Before running FileFusion, ensure you have the following installed:
 
+- Python 3.7 or higher
+- pip (Python package installer)
+- Git
 
+## Installation
 
-cd frontend
-python -m venv venv
-venv\Scripts\activate  # On Windows
-# source venv/bin/activate  # On Linux/Mac
+1. **Clone the repository:**
+   ```bash
+   git clone https://github.com/FarzanaTN/FileFusion.git
+   cd FileFusion
+   ```
 
-pip install -r requirements.txt
-streamlit run client.py
+2. **Install required dependencies:**
+   ```bash
+   pip install -r requirements.txt
+   ```
 
+   If you don't have a requirements.txt file, install the basic dependencies:
+   ```bash
+   pip install streamlit
+   # Add other dependencies as needed
+   ```
 
-docker build -t filefusion-backend .
+## Project Structure
+
+```
+FileFusion/
+├── backend/
+│   ├── server.py
+│   └── [other backend files]
+├── frontend/
+│   ├── client.py
+│   └── [other frontend files]
+├── README.md
+└── requirements.txt
+```
+
+## How to Run
+
+FileFusion requires two terminals to run simultaneously - one for the backend server and one for the frontend client.
+
+### Step 1: Start the Backend Server
+
+1. Open your first terminal
+2. Navigate to the backend directory:
+   ```bash
+   cd FileFusion/backend
+   ```
+3. Run the server:
+   ```bash
+   python3 server.py
+   ```
+
+The server will start and begin listening for client connections.
+
+### Step 2: Start the Frontend Client
+
+1. Open a second terminal
+2. Navigate to the frontend directory:
+   ```bash
+   cd FileFusion/frontend
+   ```
+3. Run the Streamlit client:
+   ```bash
+   streamlit run client.py
+   ```
+
+The Streamlit application will automatically open in your default web browser, typically at `http://localhost:8501`.
+
+## Usage
+
+1. Ensure both the backend server and frontend client are running
+2. Open your web browser and go to the Streamlit interface (usually `http://localhost:8501`)
+3. Use the web interface to upload and convert files
+4. The frontend will communicate with the backend server to process your files
+
+## Troubleshooting
+
+- **Port conflicts**: If you encounter port conflicts, check that no other applications are using the default ports
+- **Connection issues**: Ensure both server and client are running and can communicate with each other
+- **Dependencies**: Make sure all required Python packages are installed
+
+## Configuration
+
+You may need to configure:
+- Server port and host settings in `backend/server.py`
+- Client connection settings in `frontend/client.py`
+- File upload/download directories
+
+## Contributing
+
+1. Fork the repository
+2. Create a feature branch (`git checkout -b feature/new-feature`)
+3. Commit your changes (`git commit -am 'Add new feature'`)
+4. Push to the branch (`git push origin feature/new-feature`)
+5. Create a Pull Request
+
+## License
+
+This project is licensed under the MIT License - see the LICENSE file for details.
+
+## Support
+
+If you encounter any issues or have questions, please:
+1. Check the troubleshooting section above
+2. Review the project documentation
+3. Open an issue on the GitHub repository
+
+## Development
+
+For development purposes:
+- Backend server code is located in `backend/server.py`
+- Frontend client code is located in `frontend/client.py`
+- Make sure to test both components after making changes
+
+---
+
+**Note**: Remember to keep both terminals open while using FileFusion, as the application requires both the backend server and frontend client to be running simultaneously.
