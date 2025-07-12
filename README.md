@@ -28,14 +28,15 @@ Before running FileFusion, ensure you have the following installed:
 
 2. **Install required dependencies:**
    ```bash
+   cd backend
+   pip install -r requirements.txt
+   ```
+   ```bash
+   cd frontend
    pip install -r requirements.txt
    ```
 
-   If you don't have a requirements.txt file, install the basic dependencies:
-   ```bash
-   pip install streamlit
-   # Add other dependencies as needed
-   ```
+   
 
 ## Project Structure
 
@@ -43,10 +44,11 @@ Before running FileFusion, ensure you have the following installed:
 FileFusion/
 ├── backend/
 │   ├── server.py
-│   └── [other backend files]
+    ├── converter.py
+    └── requirements.txt
 ├── frontend/
 │   ├── client.py
-│   └── [other frontend files]
+│   └── requirements.txt
 ├── README.md
 └── requirements.txt
 ```
@@ -103,17 +105,7 @@ You may need to configure:
 - Client connection settings in `frontend/client.py`
 - File upload/download directories
 
-## Contributing
 
-1. Fork the repository
-2. Create a feature branch (`git checkout -b feature/new-feature`)
-3. Commit your changes (`git commit -am 'Add new feature'`)
-4. Push to the branch (`git push origin feature/new-feature`)
-5. Create a Pull Request
-
-## License
-
-This project is licensed under the MIT License - see the LICENSE file for details.
 
 ## Support
 
