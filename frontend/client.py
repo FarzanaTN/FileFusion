@@ -426,7 +426,7 @@ def send_with_ack(sock, file_bytes, progress_bar, status_text):
         return False
 
 
-
+#before pkt loss
 def receive_with_ack(sock, progress_bar, status_text):
     """Receive file with packet-by-packet ACK system"""
     try:
@@ -522,6 +522,9 @@ def receive_with_ack(sock, progress_bar, status_text):
         status_text.text(f"Download failed: {e}")
         print(f"[CLIENT] Download failed: {e}")
         return b''
+
+
+#after pkt loss
 
 
 # def main():

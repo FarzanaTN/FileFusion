@@ -223,7 +223,7 @@ def receive_ack(conn, expected_seq):
 #         print(f"[ERROR] send_with_ack: {e}")
 #         return False
 
-
+#before pkt loss
 def send_with_ack(conn, file_path):
     """Send file with packet-by-packet ACK system"""
     try:
@@ -289,6 +289,8 @@ def send_with_ack(conn, file_path):
         print(f"[ERROR] send_with_ack: {e}")
         return False
               
+
+#after pkt loss
 
 
 
