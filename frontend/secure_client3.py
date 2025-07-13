@@ -1,4 +1,5 @@
 import socket
+import ssl
 import streamlit as st
 import time
 import os
@@ -7,8 +8,6 @@ import qrcode
 from io import BytesIO
 from urllib.parse import quote
 
-
-# Configuration
 HOST = '127.0.0.1'
 PORT = 65432
 BUFFER_SIZE = 4096
@@ -26,7 +25,10 @@ def send_ack(sock, ack_num):
 def receive_ack(sock):
     ack_data = b''
     while len(ack_data) < 4:
-        ack_data += sock.recv(4 - len(ack_data))
+        chunk = sock.recv(4 - len(ack_data))
+        if not chunk:
+            raise ConnectionResetError("Connection closed while waiting for ACK")
+        ack_data += chunk
     return int.from_bytes(ack_data, 'big')
 
 def send_with_ack(sock, file_bytes, progress_bar, status_text):
@@ -36,11 +38,9 @@ def send_with_ack(sock, file_bytes, progress_bar, status_text):
     sock.sendall(str(total_size).encode().ljust(16))
     status_text.text(f"Sent file size: {total_size}")
 
-    # Define which packets to "drop" on first try
     LOSS_PACKETS = {10, 50}
     dropped_once = set()
 
-    # Prepare packets
     packets = []
     for seq_num in range(total_packets):
         start = seq_num * BUFFER_SIZE
@@ -56,7 +56,6 @@ def send_with_ack(sock, file_bytes, progress_bar, status_text):
     sock.settimeout(TIMEOUT)
 
     while base < total_packets:
-        # Send packets within window
         while next_seq < base + WINDOW_SIZE and next_seq < total_packets:
             seq, pkt_data = packets[next_seq]
             if seq in LOSS_PACKETS and seq not in dropped_once:
@@ -99,8 +98,8 @@ def send_with_ack(sock, file_bytes, progress_bar, status_text):
                     timers[seq] = time.time()
                     status_text.text(f"Timeout! Resending from Packet {seq}")
 
-    # Send end marker
     sock.sendall((0xFFFFFFFF).to_bytes(4, 'big') + (0).to_bytes(4, 'big'))
+    time.sleep(0.1)  # let the server process the end marker
     status_text.text("Upload complete!")
     progress_bar.progress(1.0)
     return True
@@ -113,6 +112,8 @@ def receive_with_ack(sock, progress_bar, status_text):
 
     while received_bytes < filesize:
         header = sock.recv(PACKET_HEADER_SIZE)
+        if not header:
+            raise ConnectionResetError("Connection closed while receiving header")
         seq_num = int.from_bytes(header[:4], 'big')
         data_len = int.from_bytes(header[4:], 'big')
 
@@ -121,7 +122,10 @@ def receive_with_ack(sock, progress_bar, status_text):
 
         data = b''
         while len(data) < data_len:
-            data += sock.recv(data_len - len(data))
+            chunk = sock.recv(data_len - len(data))
+            if not chunk:
+                raise ConnectionResetError("Connection closed during data reception")
+            data += chunk
 
         buffer[seq_num] = data
 
@@ -132,11 +136,8 @@ def receive_with_ack(sock, progress_bar, status_text):
         received_bytes += len(data)
         progress_bar.progress(min(received_bytes / filesize, 1.0))
 
-    data_bytes = b''.join(buffer[seq] for seq in sorted(buffer))
-    return data_bytes
+    return b''.join(buffer[seq] for seq in sorted(buffer))
 
-
-# QR code generation
 def generate_qr_code(url):
     qr = qrcode.QRCode(version=1, box_size=8, border=2)
     qr.add_data(url)
@@ -147,11 +148,9 @@ def generate_qr_code(url):
     buf.seek(0)
     return buf
 
-
 def main():
-    st.title("📄 Multi-Format File Converter (Selective Repeat with Packet ACK)")
+    st.title("📄 Secure File Converter (TLS + Selective Repeat)")
 
-    # Display protocol information
     with st.expander("📊 Protocol Information"):
         st.write(f"**Packet Size:** {BUFFER_SIZE} bytes")
         st.write(f"**Window Size:** {WINDOW_SIZE}")
@@ -180,8 +179,10 @@ def main():
         if st.button("Upload and Convert"):
             sock = None
             try:
-                with st.spinner("Connecting to server..."):
-                    sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+                with st.spinner("Connecting to secure server..."):
+                    raw_sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+                    context = ssl._create_unverified_context()
+                    sock = context.wrap_socket(raw_sock, server_hostname=HOST)
                     sock.settimeout(30.0)
                     sock.connect((HOST, PORT))
                     sock.settimeout(None)
@@ -217,29 +218,11 @@ def main():
                 conversion_status.text("Conversion completed successfully!")
 
                 st.subheader("📥 Download Progress")
-                name_len_data = b''
-                while len(name_len_data) < 4:
-                    chunk = sock.recv(4 - len(name_len_data))
-                    if not chunk:
-                        st.error("Connection closed while receiving filename length")
-                        return
-                    name_len_data += chunk
-
-                name_len = int(name_len_data.decode().strip())
-
-                converted_name_data = b''
-                while len(converted_name_data) < name_len:
-                    chunk = sock.recv(name_len - len(converted_name_data))
-                    if not chunk:
-                        st.error("Connection closed while receiving filename")
-                        return
-                    converted_name_data += chunk
-
-                converted_name = converted_name_data.decode()
+                name_len = int(sock.recv(4).decode().strip())
+                converted_name = sock.recv(name_len).decode()
 
                 download_progress = st.progress(0)
                 download_status = st.empty()
-
                 download_start = time.time()
                 converted_data = receive_with_ack(sock, download_progress, download_status)
                 download_end = time.time()
@@ -268,7 +251,6 @@ def main():
                     mime='application/octet-stream'
                 )
 
-                # NEW: Share option added after download button
                 with st.expander("📲 Share via QR code on local network"):
                     st.markdown(
                         "✅ To share over LAN, run this in terminal (in static_downloads folder):\n"
@@ -279,27 +261,15 @@ def main():
                         "Then enter your computer's LAN IP below (same network)."
                     )
 
-                    # Save the file to static_downloads
                     os.makedirs("static_downloads", exist_ok=True)
                     shared_path = os.path.join("static_downloads", converted_name)
                     with open(shared_path, "wb") as f:
                         f.write(converted_data)
 
-                    # lan_ip = st.text_input("Enter your computer's LAN IP:", "192.168.0.108")
-                    # share_url = f"http://{lan_ip}:8000/{converted_name}"
-
-                    # st.markdown(f"🔗 **Direct Link:** [{share_url}]({share_url})")
-
-                    # qr_buf = generate_qr_code(share_url)
-                    # st.image(qr_buf, caption="Scan this QR on your phone to download", use_container_width=False)
-
                     lan_ip = st.text_input("Enter your computer's LAN IP:", "192.168.1.100")
-                    from urllib.parse import quote
                     encoded_name = quote(converted_name)
                     share_url = f"http://{lan_ip}:8000/{encoded_name}"
-
                     st.markdown(f"🔗 **Direct Link:** [{share_url}]({share_url})")
-
                     qr_buf = generate_qr_code(share_url)
                     st.image(qr_buf, caption="Scan this QR on your phone to download", use_container_width=False)
 
@@ -313,7 +283,6 @@ def main():
                         sock.close()
                     except:
                         pass
-
 
 if __name__ == "__main__":
     main()
