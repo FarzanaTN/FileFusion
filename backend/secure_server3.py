@@ -5,6 +5,7 @@ import os
 import time
 from collections import defaultdict
 from converter import convert_with_libreoffice
+import glob
 
 HOST = '0.0.0.0'
 PORT = 65432
@@ -18,13 +19,32 @@ CONVERTED_DIR = 'converted'
 os.makedirs(UPLOAD_DIR, exist_ok=True)
 os.makedirs(CONVERTED_DIR, exist_ok=True)
 
+LOG_DIR = "../logs"
+os.makedirs(LOG_DIR, exist_ok=True)
+
+# 💥 Delete all old client logs
+for file in glob.glob(os.path.join(LOG_DIR, "client_*.log")):
+    os.remove(file)
+
+# 📝 Reset server log with timestamp
+LOG_FILE = os.path.join(LOG_DIR, "server.log")
+with open(LOG_FILE, "w") as f:
+    f.write(f"--- Server started at {time.ctime()} ---\n")
+
+
+def log_message(message):
+    print(message)
+    with open(LOG_FILE, "a") as f:
+        f.write(f"{message}\n")
+
+
 def send_ack(conn, ack_num):
     conn.sendall(ack_num.to_bytes(4, 'big'))
-    print(f"[SERVER] Sent ACK {ack_num}")
+    log_message(f"[SERVER] Sent ACK {ack_num}")
 
 def receive_with_ack(conn, dest_path):
     filesize = int(conn.recv(16).decode().strip())
-    print(f"[SERVER] Expecting {filesize} bytes")
+    log_message(f"[SERVER] Expecting {filesize} bytes")
 
     buffer = {}
     expected_seq = 0
@@ -36,7 +56,7 @@ def receive_with_ack(conn, dest_path):
         data_len = int.from_bytes(header[4:], 'big')
 
         if seq_num == 0xFFFFFFFF and data_len == 0:
-            print("[SERVER] End of transmission")
+            log_message("[SERVER] End of transmission")
             break
 
         data = b''
@@ -54,14 +74,14 @@ def receive_with_ack(conn, dest_path):
     with open(dest_path, 'wb') as f:
         for seq in sorted(buffer):
             f.write(buffer[seq])
-    print(f"[SERVER] File saved to {dest_path}")
+    log_message(f"[SERVER] File saved to {dest_path}")
 
 
 
 def send_with_ack(conn, file_path):
     filesize = os.path.getsize(file_path)
     conn.sendall(str(filesize).encode().ljust(16))
-    print(f"[SERVER] Sending file size: {filesize}")
+    log_message(f"[SERVER] Sending file size: {filesize}")
 
     # Define which packets to "drop" on first try
     LOSS_PACKETS = {10, 20}
@@ -91,21 +111,21 @@ def send_with_ack(conn, file_path):
             seq, pkt_data = packets[next_seq]
 
             if seq in LOSS_PACKETS and seq not in dropped_once:
-                print(f"[SIMULATION] Intentionally dropping Packet {seq}")
+                log_message(f"[SIMULATION] Intentionally dropping Packet {seq}")
                 dropped_once.add(seq)
                 timers[seq] = time.time()  # start timer even though dropped
                 next_seq += 1
                 continue
 
             conn.sendall(pkt_data)
-            print(f"[SERVER] Sent Packet {seq}")
+            log_message(f"[SERVER] Sent Packet {seq}")
             timers[seq] = time.time()
             next_seq += 1
 
         try:
             ack_data = conn.recv(4)
             ack_num = int.from_bytes(ack_data, 'big')
-            print(f"[SERVER] Received ACK {ack_num}")
+            log_message(f"[SERVER] Received ACK {ack_num}")
 
             if ack_num >= base:
                 base = ack_num + 1
@@ -118,7 +138,7 @@ def send_with_ack(conn, file_path):
                 if dup_acks[ack_num] >= 3:
                     resend_seq = ack_num + 1
                     if resend_seq < total_packets:
-                        print(f"[SERVER] Fast retransmit of Packet {resend_seq}")
+                        log_message(f"[SERVER] Fast retransmit of Packet {resend_seq}")
                         conn.sendall(packets[resend_seq][1])
                         timers[resend_seq] = time.time()
                     dup_acks[ack_num] = 0
@@ -127,18 +147,18 @@ def send_with_ack(conn, file_path):
             now = time.time()
             for seq in range(base, next_seq):
                 if now - timers.get(seq, 0) >= TIMEOUT:
-                    print(f"[SERVER] Timeout retransmit of Packet {seq}")
+                    log_message(f"[SERVER] Timeout retransmit of Packet {seq}")
                     conn.sendall(packets[seq][1])
                     timers[seq] = time.time()
 
     # End marker
     conn.sendall((0xFFFFFFFF).to_bytes(4, 'big') + (0).to_bytes(4, 'big'))
-    print("[SERVER] Finished sending")
+    log_message("[SERVER] Finished sending")
 
 
 def handle_client(conn, addr):
     try:
-        print(f"[SERVER] Connected to {addr}")
+        log_message(f"[SERVER] Connected to {addr}")
 
         name_len = int(conn.recv(4).decode().strip())
         filename = conn.recv(name_len).decode()
@@ -156,7 +176,7 @@ def handle_client(conn, addr):
 
         receive_with_ack(conn, input_path)
 
-        print("[SERVER] Converting...")
+        log_message("[SERVER] Converting...")
         success = convert_with_libreoffice(input_path, output_path, output_format)
         if not success:
             conn.sendall(b"ER")
@@ -169,10 +189,10 @@ def handle_client(conn, addr):
         send_with_ack(conn, output_path)
 
     except Exception as e:
-        print(f"[SERVER ERROR] {e}")
+        log_message(f"[SERVER ERROR] {e}")
     finally:
         conn.close()
-        print(f"[SERVER] Connection closed {addr}")
+        log_message(f"[SERVER] Connection closed {addr}")
 
 def start_server():
     context = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
@@ -180,7 +200,7 @@ def start_server():
     raw_sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     raw_sock.bind((HOST, PORT))
     raw_sock.listen(5)
-    print(f"[SERVER] Listening securely on {HOST}:{PORT}")
+    log_message(f"[SERVER] Listening securely on {HOST}:{PORT}")
     while True:
         raw_conn, addr = raw_sock.accept()
         try:

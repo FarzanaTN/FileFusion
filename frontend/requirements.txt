@@ -2,3 +2,4 @@ streamlit
 qrcode[pil]
 Pillow
 cryptography
+streamlit-autorefresh

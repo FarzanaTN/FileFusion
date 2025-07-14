@@ -2,3 +2,4 @@ python-pptx
 reportlab
 PyPDF2
 cryptography
+streamlit-autorefresh

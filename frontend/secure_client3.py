@@ -8,6 +8,12 @@ import qrcode
 from io import BytesIO
 from urllib.parse import quote
 
+
+timestamp = int(time.time())
+LOG_DIR = "../logs"
+os.makedirs(LOG_DIR, exist_ok=True)
+LOG_FILE = os.path.join(LOG_DIR, f"client_{timestamp}.log")
+
 HOST = '127.0.0.1'
 PORT = 65432
 BUFFER_SIZE = 4096
@@ -18,9 +24,18 @@ STATIC_DIR = "static_downloads"
 
 os.makedirs(STATIC_DIR, exist_ok=True)
 
+
+
+
+def log_message(message):
+    print(message)
+    with open(LOG_FILE, "a") as f:
+        f.write(f"{message}\n")
+
+
 def send_ack(sock, ack_num):
     sock.sendall(ack_num.to_bytes(4, 'big'))
-    print(f"[CLIENT] Sent ACK {ack_num}")
+    log_message(f"[CLIENT] Sent ACK {ack_num}")
 
 def receive_ack(sock):
     ack_data = b''
@@ -59,19 +74,19 @@ def send_with_ack(sock, file_bytes, progress_bar, status_text):
         while next_seq < base + WINDOW_SIZE and next_seq < total_packets:
             seq, pkt_data = packets[next_seq]
             if seq in LOSS_PACKETS and seq not in dropped_once:
-                print(f"[CLIENT] Intentionally dropping Packet {seq}")
+                log_message(f"[CLIENT] Intentionally dropping Packet {seq}")
                 dropped_once.add(seq)
                 timers[seq] = time.time()
                 next_seq += 1
                 continue
             sock.sendall(pkt_data)
-            print(f"[CLIENT] Sent Packet {seq}")
+            log_message(f"[CLIENT] Sent Packet {seq}")
             timers[seq] = time.time()
             next_seq += 1
 
         try:
             ack_num = receive_ack(sock)
-            print(f"[CLIENT] Received ACK {ack_num}")
+            log_message(f"[CLIENT] Received ACK {ack_num}")
             if ack_num >= base:
                 base = ack_num + 1
                 for i in list(timers):
@@ -84,7 +99,7 @@ def send_with_ack(sock, file_bytes, progress_bar, status_text):
                 if dup_acks[ack_num] >= 3:
                     resend_seq = ack_num + 1
                     if resend_seq < total_packets:
-                        print(f"[CLIENT] Fast retransmit of Packet {resend_seq}")
+                        log_message(f"[CLIENT] Fast retransmit of Packet {resend_seq}")
                         sock.sendall(packets[resend_seq][1])
                         timers[resend_seq] = time.time()
                     dup_acks[ack_num] = 0
@@ -93,7 +108,7 @@ def send_with_ack(sock, file_bytes, progress_bar, status_text):
             now = time.time()
             for seq in range(base, next_seq):
                 if seq in timers and now - timers[seq] >= TIMEOUT:
-                    print(f"[CLIENT] Timeout retransmit of Packet {seq}")
+                    log_message(f"[CLIENT] Timeout retransmit of Packet {seq}")
                     sock.sendall(packets[seq][1])
                     timers[seq] = time.time()
                     status_text.text(f"Timeout! Resending from Packet {seq}")
@@ -266,7 +281,7 @@ def main():
                     with open(shared_path, "wb") as f:
                         f.write(converted_data)
 
-                    lan_ip = st.text_input("Enter your computer's LAN IP:", "192.168.1.100")
+                    lan_ip = st.text_input("Enter your computer's LAN IP:", "192.168.1.102")
                     encoded_name = quote(converted_name)
                     share_url = f"http://{lan_ip}:8000/{encoded_name}"
                     st.markdown(f"🔗 **Direct Link:** [{share_url}]({share_url})")
