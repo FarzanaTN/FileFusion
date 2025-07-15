@@ -352,8 +352,154 @@ def generate_qr_code(url):
     buf.seek(0)
     return buf
 
+# def main():
+#     st.title("📄 FileFusion (Secure File Converter)")
+
+#     with st.expander("📊 Protocol Information"):
+#         st.write(f"**Packet Size:** {BUFFER_SIZE} bytes")
+#         st.write(f"**Window Size:** {WINDOW_SIZE}")
+#         st.write(f"**Timeout:** {TIMEOUT} seconds")
+#         st.write(f"**Server:** {HOST}:{PORT}")
+
+#     uploaded_file = st.file_uploader("Upload your file", type=[".doc", ".docx", ".odt", ".pptx"])
+
+#     output_format = None
+#     if uploaded_file:
+#         file_ext = os.path.splitext(uploaded_file.name)[1].lower()
+#         allowed_outputs = ["pdf", "docx", "odt"]
+#         output_format = st.selectbox("Select output format", allowed_outputs)
+
+#     if uploaded_file and output_format:
+#         filename = uploaded_file.name
+#         file_bytes = uploaded_file.read()
+
+#         st.info(f"📄  **File:** {filename}")
+#         st.info(f"📏  **Size:** {len(file_bytes):,} bytes")
+#         st.info(f"🔄 **Converting to:** {output_format.upper()}")
+
+#         expected_packets = (len(file_bytes) + BUFFER_SIZE - 1) // BUFFER_SIZE
+#         st.info(f"📦 **Expected packets:** {expected_packets}")
+
+#         if st.button("Upload and Convert"):
+#             sock = None
+#             try:
+#                 with st.spinner("Connecting to secure server..."):
+#                     raw_sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+#                     context = ssl._create_unverified_context()
+#                     sock = context.wrap_socket(raw_sock, server_hostname=HOST)
+#                     sock.settimeout(30.0)
+#                     sock.connect((HOST, PORT))
+#                     sock.settimeout(None)
+
+#                     sock.sendall(str(len(filename)).encode().ljust(4))
+#                     sock.sendall(filename.encode())
+#                     sock.sendall(output_format.encode().ljust(8))
+
+#                 st.subheader("📤 Upload Progress")
+#                 upload_progress = st.progress(0)
+#                 upload_status = st.empty()
+
+#                 upload_start = time.time()
+#                 success = send_with_ack(sock, file_bytes, upload_progress, upload_status)
+#                 upload_end = time.time()
+
+#                 if not success:
+#                     st.error("❌ Upload failed")
+#                     return
+
+#                 st.subheader("⚙️ Conversion Progress")
+#                 conversion_status = st.empty()
+#                 conversion_status.text("Waiting for server response...")
+
+#                 sock.settimeout(600.0)
+#                 response = sock.recv(2)
+#                 sock.settimeout(None)
+
+#                 if response != b"OK":
+#                     st.error("❌ Conversion failed on server")
+#                     return
+
+#                 conversion_status.text("Conversion completed successfully!")
+
+#                 st.subheader("📥 Download Progress")
+#                 name_len = int(sock.recv(4).decode().strip())
+#                 converted_name = sock.recv(name_len).decode()
+
+#                 download_progress = st.progress(0)
+#                 download_status = st.empty()
+#                 download_start = time.time()
+#                 converted_data = receive_with_ack(sock, download_progress, download_status)
+#                 download_end = time.time()
+
+#                 if not converted_data:
+#                     st.error("❌ Failed to receive converted file")
+#                     return
+
+#                 st.success("🎉 Conversion completed successfully!")
+
+#                 col1, col2 = st.columns(2)
+#                 with col1:
+#                     st.metric("📤 Upload Time (Client)", f"{upload_end - upload_start:.2f}s")
+#                     st.metric("📥 Download Time (Client)", f"{download_end - download_start:.2f}s")
+#                     st.metric("📦 Total Packets", expected_packets)
+
+#                 # with col2:
+#                 #     st.metric("⚙️ Conversion Time (Server)", "N/A")
+#                 #     st.metric("📤 Upload Time (Server)", "N/A")
+#                 #     st.metric("📥 Download Time (Server)", "N/A")
+
+#                 st.download_button(
+#                     label="💾 Download Converted File",
+#                     data=converted_data,
+#                     file_name=converted_name,
+#                     mime='application/octet-stream'
+#                 )
+
+#                 with st.expander("📲 Share via QR code on local network"):
+#                     # st.markdown(
+#                     #     "✅ To share over LAN, run this in terminal (in static_downloads folder):\n"
+#                     #     "```\n"
+#                     #     "cd static_downloads\n"
+#                     #     "python -m http.server 8000\n"
+#                     #     "```\n"
+#                     #     "Then enter your computer's LAN IP below (same network)."
+#                     # )
+
+#                     os.makedirs("static_downloads", exist_ok=True)
+#                     shared_path = os.path.join("static_downloads", converted_name)
+#                     with open(shared_path, "wb") as f:
+#                         f.write(converted_data)
+
+#                    # lan_ip = st.text_input("Enter your computer's LAN IP:", "192.168.1.102")
+#                     if "lan_ip" not in st.session_state:
+#                          st.session_state.lan_ip = "192.168.1.101"
+
+#                     lan_ip = st.text_input(
+#                      "Enter your computer's LAN IP:",
+#                      value=st.session_state.lan_ip,
+#                         key="lan_ip"
+#                     )
+                   
+#                     encoded_name = quote(converted_name)
+#                     share_url = f"http://{lan_ip}:8000/{encoded_name}"
+#                     st.markdown(f"🔗 **Direct Link:** [{share_url}]({share_url})")
+#                     qr_buf = generate_qr_code(share_url)
+#                     st.image(qr_buf, caption="Scan this QR on your phone to download", use_container_width=False)
+
+#             except Exception as e:
+#                 st.error(f"❌ Connection failed: {e}")
+#                 import traceback
+#                 st.text(traceback.format_exc())
+#             finally:
+#                 if sock:
+#                     try:
+#                         sock.close()
+#                     except:
+#                         pass
+
+
 def main():
-    st.title("📄 Secure File Converter (TLS + Selective Repeat)")
+    st.title("📄 FileFusion (Secure File Converter)")
 
     with st.expander("📊 Protocol Information"):
         st.write(f"**Packet Size:** {BUFFER_SIZE} bytes")
@@ -361,7 +507,7 @@ def main():
         st.write(f"**Timeout:** {TIMEOUT} seconds")
         st.write(f"**Server:** {HOST}:{PORT}")
 
-    uploaded_file = st.file_uploader("Upload your file", type=[".doc", ".docx", ".odt", ".pptx", ".xls", ".xlsx"])
+    uploaded_file = st.file_uploader("Upload your file", type=[".doc", ".docx", ".odt", ".pptx"])
 
     output_format = None
     if uploaded_file:
@@ -443,11 +589,6 @@ def main():
                     st.metric("📥 Download Time (Client)", f"{download_end - download_start:.2f}s")
                     st.metric("📦 Total Packets", expected_packets)
 
-                with col2:
-                    st.metric("⚙️ Conversion Time (Server)", "N/A")
-                    st.metric("📤 Upload Time (Server)", "N/A")
-                    st.metric("📥 Download Time (Server)", "N/A")
-
                 st.download_button(
                     label="💾 Download Converted File",
                     data=converted_data,
@@ -455,27 +596,15 @@ def main():
                     mime='application/octet-stream'
                 )
 
-                with st.expander("📲 Share via QR code on local network"):
-                    st.markdown(
-                        "✅ To share over LAN, run this in terminal (in static_downloads folder):\n"
-                        "```\n"
-                        "cd static_downloads\n"
-                        "python -m http.server 8000\n"
-                        "```\n"
-                        "Then enter your computer's LAN IP below (same network)."
-                    )
+                # ✅ Save conversion result to session_state for later sharing
+                st.session_state['converted_name'] = converted_name
+                st.session_state['converted_data'] = converted_data
 
-                    os.makedirs("static_downloads", exist_ok=True)
-                    shared_path = os.path.join("static_downloads", converted_name)
-                    with open(shared_path, "wb") as f:
-                        f.write(converted_data)
-
-                    lan_ip = st.text_input("Enter your computer's LAN IP:", "192.168.1.102")
-                    encoded_name = quote(converted_name)
-                    share_url = f"http://{lan_ip}:8000/{encoded_name}"
-                    st.markdown(f"🔗 **Direct Link:** [{share_url}]({share_url})")
-                    qr_buf = generate_qr_code(share_url)
-                    st.image(qr_buf, caption="Scan this QR on your phone to download", use_container_width=False)
+                # ✅ Also save a local copy in static_downloads
+                os.makedirs("static_downloads", exist_ok=True)
+                shared_path = os.path.join("static_downloads", converted_name)
+                with open(shared_path, "wb") as f:
+                    f.write(converted_data)
 
             except Exception as e:
                 st.error(f"❌ Connection failed: {e}")
@@ -487,6 +616,28 @@ def main():
                         sock.close()
                     except:
                         pass
+
+    # ✅ Always show share section if we have a converted file
+    if 'converted_name' in st.session_state and 'converted_data' in st.session_state:
+        st.subheader("📲 Share via QR code on local network")
+        with st.expander("Share your file"):
+            if "lan_ip" not in st.session_state:
+                st.session_state['lan_ip'] = "192.168.1.100"
+
+            lan_ip = st.text_input(
+                "Enter your computer's LAN IP:",
+                value=st.session_state['lan_ip'],
+                key="lan_ip"
+            )
+
+            converted_name = st.session_state['converted_name']
+            encoded_name = quote(converted_name)
+            share_url = f"http://{lan_ip}:8000/{encoded_name}"
+
+            st.markdown(f"🔗 **Direct Link:** [{share_url}]({share_url})")
+            qr_buf = generate_qr_code(share_url)
+            st.image(qr_buf, caption="Scan this QR on your phone to download", use_container_width=False)
+
 
 if __name__ == "__main__":
     main()
