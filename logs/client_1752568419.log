@@ -1,0 +1,277 @@
+[CLIENT][CC] cwnd=1.00 ssthresh=16.00 state=Slow Start
+[CLIENT] Sent Packet 0
+[CLIENT] Received ACK 0
+[CLIENT][CC] cwnd=2.00 ssthresh=16.00 state=Slow Start
+[CLIENT] Sent Packet 1
+[CLIENT] Sent Packet 2
+[CLIENT] Received ACK 1
+[CLIENT][CC] cwnd=3.00 ssthresh=16.00 state=Slow Start
+[CLIENT] Sent Packet 3
+[CLIENT] Sent Packet 4
+[CLIENT] Received ACK 2
+[CLIENT][CC] cwnd=4.00 ssthresh=16.00 state=Slow Start
+[CLIENT] Sent Packet 5
+[CLIENT] Sent Packet 6
+[CLIENT] Received ACK 3
+[CLIENT][CC] cwnd=5.00 ssthresh=16.00 state=Slow Start
+[CLIENT] Sent Packet 7
+[CLIENT] Sent Packet 8
+[CLIENT] Received ACK 4
+[CLIENT][CC] cwnd=6.00 ssthresh=16.00 state=Slow Start
+[CLIENT] Sent Packet 9
+[CLIENT] Intentionally dropping Packet 10
+[CLIENT] Received ACK 5
+[CLIENT][CC] cwnd=7.00 ssthresh=16.00 state=Slow Start
+[CLIENT] Sent Packet 11
+[CLIENT] Sent Packet 12
+[CLIENT] Received ACK 6
+[CLIENT][CC] cwnd=8.00 ssthresh=16.00 state=Slow Start
+[CLIENT] Sent Packet 13
+[CLIENT] Sent Packet 14
+[CLIENT] Received ACK 7
+[CLIENT][CC] cwnd=9.00 ssthresh=16.00 state=Slow Start
+[CLIENT] Sent Packet 15
+[CLIENT] Sent Packet 16
+[CLIENT] Received ACK 8
+[CLIENT][CC] cwnd=10.00 ssthresh=16.00 state=Slow Start
+[CLIENT] Sent Packet 17
+[CLIENT] Sent Packet 18
+[CLIENT] Received ACK 9
+[CLIENT][CC] cwnd=11.00 ssthresh=16.00 state=Slow Start
+[CLIENT] Sent Packet 19
+[CLIENT] Sent Packet 20
+[CLIENT] Received ACK 9
+[CLIENT] Received ACK 9
+[CLIENT] Received ACK 9
+[CLIENT][CC] DUPACK threshold: cwnd=8.50 ssthresh=5.50 state=Fast Recovery
+[CLIENT] Fast retransmit of Packet 10
+[CLIENT] Received ACK 9
+[CLIENT] Received ACK 9
+[CLIENT] Received ACK 9
+[CLIENT] Received ACK 9
+[CLIENT] Received ACK 9
+[CLIENT] Received ACK 9
+[CLIENT] Received ACK 9
+[CLIENT] Received ACK 20
+[CLIENT][CC] Exit FR: cwnd=5.50 ssthresh=5.50 state=Congestion Avoidance
+[CLIENT][CC] cwnd=5.68 ssthresh=5.50 state=Congestion Avoidance
+[CLIENT] Sent Packet 21
+[CLIENT] Sent Packet 22
+[CLIENT] Sent Packet 23
+[CLIENT] Sent Packet 24
+[CLIENT] Sent Packet 25
+[CLIENT] Received ACK 21
+[CLIENT][CC] cwnd=5.86 ssthresh=5.50 state=Congestion Avoidance
+[CLIENT] Sent Packet 26
+[CLIENT] Received ACK 22
+[CLIENT][CC] cwnd=6.03 ssthresh=5.50 state=Congestion Avoidance
+[CLIENT] Sent Packet 27
+[CLIENT] Sent Packet 28
+[CLIENT] Received ACK 23
+[CLIENT][CC] cwnd=6.19 ssthresh=5.50 state=Congestion Avoidance
+[CLIENT] Sent Packet 29
+[CLIENT] Received ACK 24
+[CLIENT][CC] cwnd=6.36 ssthresh=5.50 state=Congestion Avoidance
+[CLIENT] Sent Packet 30
+[CLIENT] Received ACK 25
+[CLIENT][CC] cwnd=6.51 ssthresh=5.50 state=Congestion Avoidance
+[CLIENT] Sent Packet 31
+[CLIENT] Received ACK 26
+[CLIENT][CC] cwnd=6.67 ssthresh=5.50 state=Congestion Avoidance
+[CLIENT] Sent Packet 32
+[CLIENT] Received ACK 27
+[CLIENT][CC] cwnd=6.82 ssthresh=5.50 state=Congestion Avoidance
+[CLIENT] Sent Packet 33
+[CLIENT] Received ACK 28
+[CLIENT][CC] cwnd=6.96 ssthresh=5.50 state=Congestion Avoidance
+[CLIENT] Sent Packet 34
+[CLIENT] Received ACK 29
+[CLIENT][CC] cwnd=7.11 ssthresh=5.50 state=Congestion Avoidance
+[CLIENT] Sent Packet 35
+[CLIENT] Sent Packet 36
+[CLIENT] Received ACK 30
+[CLIENT][CC] cwnd=7.25 ssthresh=5.50 state=Congestion Avoidance
+[CLIENT] Sent Packet 37
+[CLIENT] Received ACK 31
+[CLIENT][CC] cwnd=7.39 ssthresh=5.50 state=Congestion Avoidance
+[CLIENT] Sent Packet 38
+[CLIENT] Received ACK 32
+[CLIENT][CC] cwnd=7.52 ssthresh=5.50 state=Congestion Avoidance
+[CLIENT] Sent Packet 39
+[CLIENT] Received ACK 33
+[CLIENT][CC] cwnd=7.65 ssthresh=5.50 state=Congestion Avoidance
+[CLIENT] Sent Packet 40
+[CLIENT] Received ACK 34
+[CLIENT][CC] cwnd=7.78 ssthresh=5.50 state=Congestion Avoidance
+[CLIENT] Sent Packet 41
+[CLIENT] Received ACK 35
+[CLIENT][CC] cwnd=7.91 ssthresh=5.50 state=Congestion Avoidance
+[CLIENT] Sent Packet 42
+[CLIENT] Received ACK 36
+[CLIENT][CC] cwnd=8.04 ssthresh=5.50 state=Congestion Avoidance
+[CLIENT] Sent Packet 43
+[CLIENT] Sent Packet 44
+[CLIENT] Received ACK 37
+[CLIENT][CC] cwnd=8.16 ssthresh=5.50 state=Congestion Avoidance
+[CLIENT] Sent Packet 45
+[CLIENT] Received ACK 38
+[CLIENT][CC] cwnd=8.29 ssthresh=5.50 state=Congestion Avoidance
+[CLIENT] Sent Packet 46
+[CLIENT] Received ACK 39
+[CLIENT][CC] cwnd=8.41 ssthresh=5.50 state=Congestion Avoidance
+[CLIENT] Sent Packet 47
+[CLIENT] Received ACK 40
+[CLIENT][CC] cwnd=8.53 ssthresh=5.50 state=Congestion Avoidance
+[CLIENT] Sent Packet 48
+[CLIENT] Received ACK 41
+[CLIENT][CC] cwnd=8.64 ssthresh=5.50 state=Congestion Avoidance
+[CLIENT] Sent Packet 49
+[CLIENT] Received ACK 42
+[CLIENT][CC] cwnd=8.76 ssthresh=5.50 state=Congestion Avoidance
+[CLIENT] Intentionally dropping Packet 50
+[CLIENT] Received ACK 43
+[CLIENT][CC] cwnd=8.87 ssthresh=5.50 state=Congestion Avoidance
+[CLIENT] Sent Packet 51
+[CLIENT] Received ACK 44
+[CLIENT][CC] cwnd=8.99 ssthresh=5.50 state=Congestion Avoidance
+[CLIENT] Sent Packet 52
+[CLIENT] Received ACK 45
+[CLIENT][CC] cwnd=9.10 ssthresh=5.50 state=Congestion Avoidance
+[CLIENT] Sent Packet 53
+[CLIENT] Sent Packet 54
+[CLIENT] Received ACK 46
+[CLIENT][CC] cwnd=9.21 ssthresh=5.50 state=Congestion Avoidance
+[CLIENT] Sent Packet 55
+[CLIENT] Received ACK 47
+[CLIENT][CC] cwnd=9.32 ssthresh=5.50 state=Congestion Avoidance
+[CLIENT] Sent Packet 56
+[CLIENT] Received ACK 48
+[CLIENT][CC] cwnd=9.42 ssthresh=5.50 state=Congestion Avoidance
+[CLIENT] Sent Packet 57
+[CLIENT] Received ACK 49
+[CLIENT][CC] cwnd=9.53 ssthresh=5.50 state=Congestion Avoidance
+[CLIENT] Sent Packet 58
+[CLIENT] Received ACK 49
+[CLIENT] Received ACK 49
+[CLIENT] Received ACK 49
+[CLIENT][CC] DUPACK threshold: cwnd=7.76 ssthresh=4.76 state=Fast Recovery
+[CLIENT] Fast retransmit of Packet 50
+[CLIENT] Received ACK 49
+[CLIENT] Received ACK 49
+[CLIENT] Received ACK 49
+[CLIENT] Received ACK 49
+[CLIENT] Received ACK 49
+[CLIENT] Received ACK 58
+[CLIENT][CC] Exit FR: cwnd=4.76 ssthresh=4.76 state=Congestion Avoidance
+[CLIENT][CC] cwnd=4.97 ssthresh=4.76 state=Congestion Avoidance
+[CLIENT] Sent Packet 59
+[CLIENT] Sent Packet 60
+[CLIENT] Sent Packet 61
+[CLIENT] Sent Packet 62
+[CLIENT] Received ACK 59
+[CLIENT][CC] cwnd=5.18 ssthresh=4.76 state=Congestion Avoidance
+[CLIENT] Sent Packet 63
+[CLIENT] Sent Packet 64
+[CLIENT] Received ACK 60
+[CLIENT][CC] cwnd=5.37 ssthresh=4.76 state=Congestion Avoidance
+[CLIENT] Sent Packet 65
+[CLIENT] Received ACK 61
+[CLIENT][CC] cwnd=5.55 ssthresh=4.76 state=Congestion Avoidance
+[CLIENT] Sent Packet 66
+[CLIENT] Received ACK 62
+[CLIENT][CC] cwnd=5.73 ssthresh=4.76 state=Congestion Avoidance
+[CLIENT] Sent Packet 67
+[CLIENT] Received ACK 63
+[CLIENT][CC] cwnd=5.91 ssthresh=4.76 state=Congestion Avoidance
+[CLIENT] Sent Packet 68
+[CLIENT] Received ACK 64
+[CLIENT][CC] cwnd=6.08 ssthresh=4.76 state=Congestion Avoidance
+[CLIENT] Sent Packet 69
+[CLIENT] Sent Packet 70
+[CLIENT] Received ACK 65
+[CLIENT][CC] cwnd=6.24 ssthresh=4.76 state=Congestion Avoidance
+[CLIENT] Sent Packet 71
+[CLIENT] Received ACK 66
+[CLIENT][CC] cwnd=6.40 ssthresh=4.76 state=Congestion Avoidance
+[CLIENT] Sent Packet 72
+[CLIENT] Received ACK 67
+[CLIENT][CC] cwnd=6.56 ssthresh=4.76 state=Congestion Avoidance
+[CLIENT] Sent Packet 73
+[CLIENT] Received ACK 68
+[CLIENT][CC] cwnd=6.71 ssthresh=4.76 state=Congestion Avoidance
+[CLIENT] Sent Packet 74
+[CLIENT] Received ACK 69
+[CLIENT][CC] cwnd=6.86 ssthresh=4.76 state=Congestion Avoidance
+[CLIENT] Sent Packet 75
+[CLIENT] Received ACK 70
+[CLIENT][CC] cwnd=7.01 ssthresh=4.76 state=Congestion Avoidance
+[CLIENT] Sent Packet 76
+[CLIENT] Sent Packet 77
+[CLIENT] Received ACK 71
+[CLIENT][CC] cwnd=7.15 ssthresh=4.76 state=Congestion Avoidance
+[CLIENT] Sent Packet 78
+[CLIENT] Received ACK 72
+[CLIENT][CC] cwnd=7.29 ssthresh=4.76 state=Congestion Avoidance
+[CLIENT] Sent Packet 79
+[CLIENT] Received ACK 73
+[CLIENT][CC] cwnd=7.43 ssthresh=4.76 state=Congestion Avoidance
+[CLIENT] Sent Packet 80
+[CLIENT] Received ACK 74
+[CLIENT][CC] cwnd=7.56 ssthresh=4.76 state=Congestion Avoidance
+[CLIENT] Sent Packet 81
+[CLIENT] Received ACK 75
+[CLIENT][CC] cwnd=7.69 ssthresh=4.76 state=Congestion Avoidance
+[CLIENT] Sent Packet 82
+[CLIENT] Received ACK 76
+[CLIENT][CC] cwnd=7.82 ssthresh=4.76 state=Congestion Avoidance
+[CLIENT] Sent Packet 83
+[CLIENT] Received ACK 77
+[CLIENT][CC] cwnd=7.95 ssthresh=4.76 state=Congestion Avoidance
+[CLIENT] Received ACK 78
+[CLIENT][CC] cwnd=8.08 ssthresh=4.76 state=Congestion Avoidance
+[CLIENT] Received ACK 79
+[CLIENT][CC] cwnd=8.20 ssthresh=4.76 state=Congestion Avoidance
+[CLIENT] Received ACK 80
+[CLIENT][CC] cwnd=8.32 ssthresh=4.76 state=Congestion Avoidance
+[CLIENT] Received ACK 81
+[CLIENT][CC] cwnd=8.44 ssthresh=4.76 state=Congestion Avoidance
+[CLIENT] Received ACK 82
+[CLIENT][CC] cwnd=8.56 ssthresh=4.76 state=Congestion Avoidance
+[CLIENT] Received ACK 83
+[CLIENT][CC] cwnd=8.68 ssthresh=4.76 state=Congestion Avoidance
+[CLIENT] Sent ACK 0
+[CLIENT] Sent ACK 1
+[CLIENT] Sent ACK 2
+[CLIENT] Sent ACK 3
+[CLIENT] Sent ACK 4
+[CLIENT] Sent ACK 5
+[CLIENT] Sent ACK 6
+[CLIENT] Sent ACK 7
+[CLIENT] Sent ACK 8
+[CLIENT] Sent ACK 9
+[CLIENT] Sent ACK 9
+[CLIENT] Sent ACK 9
+[CLIENT] Sent ACK 9
+[CLIENT] Sent ACK 9
+[CLIENT] Sent ACK 14
+[CLIENT] Sent ACK 15
+[CLIENT] Sent ACK 16
+[CLIENT] Sent ACK 17
+[CLIENT] Sent ACK 18
+[CLIENT] Sent ACK 19
+[CLIENT] Sent ACK 19
+[CLIENT] Sent ACK 19
+[CLIENT] Sent ACK 19
+[CLIENT] Sent ACK 19
+[CLIENT] Sent ACK 24
+[CLIENT] Sent ACK 25
+[CLIENT] Sent ACK 26
+[CLIENT] Sent ACK 27
+[CLIENT] Sent ACK 28
+[CLIENT] Sent ACK 29
+[CLIENT] Sent ACK 30
+[CLIENT] Sent ACK 31
+[CLIENT] Sent ACK 32
+[CLIENT] Sent ACK 33
+[CLIENT] Sent ACK 34
+[CLIENT] Sent ACK 35

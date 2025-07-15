@@ -1,5 +1,8 @@
 import streamlit as st
 import os
+import time
+import pandas as pd
+import altair as alt
 from streamlit_autorefresh import st_autorefresh
 
 # CONFIG
@@ -62,10 +65,138 @@ with cols[1]:
                         with open(os.path.join(LOG_DIR, filename), "r") as f:
                             client_logs = f.read()
                         st.text_area(
-                            label="",         # No extra label inside box
+                            label="",
                             value=client_logs,
-                            height=200,       # Compact height with scroll
+                            height=200,
                             key=f"client_log_{filename}"
                         )
                     except Exception as e:
                         st.error(f"❌ Error loading {filename}: {e}")
+
+############################
+# SECTION: Per-Client CWND Graphs
+############################
+st.subheader("📈 TCP Reno CWND Graphs (One per Client)")
+
+if not client_logs_files:
+    st.info("No client logs found for graphs yet.")
+else:
+    for filename in client_logs_files:
+        st.markdown(f"### 📌 Graph for {filename}")
+
+        round_numbers = []
+        cwnd_values = []
+        ssthresh_values = []
+        states = []
+
+        try:
+            with open(os.path.join(LOG_DIR, filename), "r") as f:
+                round_counter = 1
+                for line in f:
+                    if "[CC]" in line:
+                        # Remove timestamp if present
+                        if "," in line and line[0].isdigit():
+                            _, text = line.strip().split(",", 1)
+                        else:
+                            text = line.strip()
+
+                        tokens = text.split()
+                        cwnd_token = [t for t in tokens if t.startswith("cwnd=")]
+                        ssthresh_token = [t for t in tokens if t.startswith("ssthresh=")]
+                        state_token = [t for t in tokens if t.startswith("state=")]
+
+                        if cwnd_token and ssthresh_token and state_token:
+                            cwnd = float(cwnd_token[0].split("=")[1])
+                            ssthresh = float(ssthresh_token[0].split("=")[1])
+                            state = state_token[0].split("=")[1]
+                            round_numbers.append(round_counter)
+                            cwnd_values.append(cwnd)
+                            ssthresh_values.append(ssthresh)
+                            states.append(state)
+                            round_counter += 1
+
+        except Exception as e:
+            st.warning(f"Error reading {filename}: {e}")
+            continue
+
+        if not cwnd_values:
+            st.info(f"No congestion control logs in {filename}.")
+            continue
+
+        # Build DataFrame
+        df = pd.DataFrame({
+            "Round": round_numbers,
+            "CWND": cwnd_values,
+            "SSTHRESH": ssthresh_values,
+            "State": states
+        })
+
+        # ✅ Limit to first 150 rounds
+        df = df[df["Round"] <= 150]
+
+        if df.empty:
+            st.info(f"No data in first 150 rounds for {filename}.")
+            continue
+
+        # Build background shading intervals
+        bands = []
+        if not df.empty:
+            prev_state = df.iloc[0]["State"]
+            start_round = df.iloc[0]["Round"]
+            for i in range(1, len(df)):
+                this_state = df.iloc[i]["State"]
+                if this_state != prev_state:
+                    bands.append({
+                        "Start": start_round,
+                        "End": df.iloc[i]["Round"],
+                        "State": prev_state
+                    })
+                    start_round = df.iloc[i]["Round"]
+                    prev_state = this_state
+            bands.append({
+                "Start": start_round,
+                "End": df.iloc[-1]["Round"] + 1,
+                "State": prev_state
+            })
+
+        bands_df = pd.DataFrame(bands)
+
+        # Show data
+        st.dataframe(df)
+
+        # Build chart
+        background = (
+            alt.Chart(bands_df)
+            .mark_rect(opacity=0.2)
+            .encode(
+                x='Start:Q',
+                x2='End:Q',
+                color=alt.Color('State:N', legend=alt.Legend(title="TCP Reno State"))
+            )
+        )
+
+        line = (
+            alt.Chart(df)
+            .mark_line(point=True)
+            .encode(
+                x=alt.X(
+                    "Round:Q",
+                    title="Transmission Round",
+                    scale=alt.Scale(domain=[0, 150]),
+                    axis=alt.Axis(
+                        values=list(range(0, 151, 5)),
+                        title='Transmission Round',
+                        tickMinStep=5
+                    )
+                ),
+                y=alt.Y("CWND:Q", title="Congestion Window Size (packets)"),
+                tooltip=["Round", "CWND", "SSTHRESH", "State"]
+            )
+        )
+
+        chart = alt.layer(background, line).resolve_scale(color='independent').properties(
+            title=f"TCP Reno CWND vs Transmission Round with State Shading - {filename}",
+            width='container'
+        )
+
+        st.altair_chart(chart, use_container_width=True)
