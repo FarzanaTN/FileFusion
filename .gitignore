@@ -4,3 +4,6 @@ uploads/
 backend/converted/
 backend/uploads/
 backend/__pycache__/
+cert.pem
+key.pem
+frontend/static_downloads/
