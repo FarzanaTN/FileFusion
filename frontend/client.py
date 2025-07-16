@@ -1,640 +1,232 @@
 import socket
+import ssl
 import streamlit as st
 import time
 import os
+from collections import defaultdict
+import qrcode
+from io import BytesIO
+from urllib.parse import quote
+import random
+
+timestamp = int(time.time())
+LOG_DIR = "../logs"
+os.makedirs(LOG_DIR, exist_ok=True)
+LOG_FILE = os.path.join(LOG_DIR, f"client_{timestamp}.log")
 
 HOST = '127.0.0.1'
 PORT = 65432
 BUFFER_SIZE = 4096
+PACKET_HEADER_SIZE = 8
+TIMEOUT = 50.0
+WINDOW_SIZE = 5
+STATIC_DIR = "static_downloads"
 
-# Allowed input → output mappings (must match server's)
-ALLOWED_CONVERSIONS = {
-    ".doc": ["pdf", "docx", "odt"],
-    ".docx": ["pdf", "doc", "odt"],
-    ".odt": ["pdf", "docx"],
-    ".pptx": ["pdf"],
-    ".xlsx": ["pdf"],
-    ".xls": ["pdf"],
-}
+os.makedirs(STATIC_DIR, exist_ok=True)
 
-<<<<<<< HEAD
-def send_with_progress(sock, file_bytes, progress_bar):
-    total = len(file_bytes)
-    sent = 0
-    while sent < total:
-        end = min(sent + BUFFER_SIZE, total)
-        sock.sendall(file_bytes[sent:end])
-        sent = end
-        progress_bar.progress(sent / total)
-    progress_bar.progress(1.0)
-=======
-# def send_ack(sock, seq_num):
-#     """Send ACK for received packet"""
-#     try:
-#         ack_data = seq_num.to_bytes(4, byteorder='big')
-#         sock.sendall(ack_data)
-#         return True
-#     except Exception as e:
-#         print(f"Failed to send ACK for packet {seq_num}: {e}")
-#         return False
 
-# def receive_ack(sock, expected_seq):
-#     """Receive and validate ACK"""
-#     try:
-#         sock.settimeout(TIMEOUT)
-#         ack_data = b''
-#         while len(ack_data) < ACK_SIZE:
-#             chunk = sock.recv(ACK_SIZE - len(ack_data))
-#             if not chunk:
-#                 return False
-#             ack_data += chunk
-        
-#         received_seq = int.from_bytes(ack_data, byteorder='big')
-#         return received_seq == expected_seq
-#     except socket.timeout:
-#         return False
-#     except Exception as e:
-#         print(f"Error receiving ACK for {expected_seq}: {e}")
-#         return False
-#     finally:
-#         sock.settimeout(None)
 
-# def send_with_ack(sock, file_bytes, progress_bar, status_text):
-#     """Send file with packet-by-packet ACK system"""
-#     try:
-#         total_size = len(file_bytes)
-        
-#         # Send file size first
-#         sock.sendall(str(total_size).encode().ljust(16))
-        
-#         seq_num = 0
-#         offset = 0
-#         total_packets = (total_size + BUFFER_SIZE - 1) // BUFFER_SIZE
-        
-#         while offset < total_size:
-#             # Prepare data chunk
-#             remaining = total_size - offset
-#             chunk_size = min(BUFFER_SIZE, remaining)
-#             data = file_bytes[offset:offset + chunk_size]
-            
-#             # Prepare packet header
-#             packet_header = seq_num.to_bytes(4, byteorder='big') + len(data).to_bytes(4, byteorder='big')
-            
-#             # Send packet with retries
-#             retry_count = 0
-#             ack_received = False
-            
-#             while retry_count < MAX_RETRIES and not ack_received:
-#                 try:
-#                     # Send header first, then data
-#                     sock.sendall(packet_header)
-#                     sock.sendall(data)
-#                     status_text.text(f"Sending packet {seq_num + 1}/{total_packets} (Attempt {retry_count + 1})")
-                    
-#                     # Wait for ACK
-#                     ack_received = receive_ack(sock, seq_num)
-#                     if ack_received:
-#                         offset += len(data)
-#                         seq_num += 1
-#                         progress_bar.progress(offset / total_size)
-#                         break
-#                     else:
-#                         retry_count += 1
-#                         if retry_count < MAX_RETRIES:
-#                             status_text.text(f"Retry packet {seq_num + 1}, attempt {retry_count + 1}")
-                        
-#                 except Exception as e:
-#                     retry_count += 1
-#                     status_text.text(f"Error sending packet {seq_num}: {e}")
-            
-#             if not ack_received:
-#                 status_text.text(f"Failed to send packet {seq_num} after {MAX_RETRIES} attempts")
-#                 return False
-        
-#         # Send end-of-transmission marker
-#         end_packet = (0xFFFFFFFF).to_bytes(4, byteorder='big') + (0).to_bytes(4, byteorder='big')
-#         sock.sendall(end_packet)
-#         status_text.text("Upload completed successfully!")
-#         progress_bar.progress(1.0)
-        
-#         return True
-#     except Exception as e:
-#         status_text.text(f"Upload failed: {e}")
-#         return False
 
-# def receive_with_ack(sock, progress_bar, status_text):
-#     """Receive file with packet-by-packet ACK system"""
-#     try:
-#         # Receive file size with better error handling
-#         filesize_data = b''
-#         while len(filesize_data) < 16:
-#             chunk = sock.recv(16 - len(filesize_data))
-#             if not chunk:
-#                 status_text.text("Connection closed while receiving file size")
-#                 return b''
-#             filesize_data += chunk
-        
-#         try:
-#             filesize = int(filesize_data.decode().strip())
-#         except ValueError as e:
-#             status_text.text(f"Invalid file size data: {filesize_data}")
-#             return b''
-        
-#         status_text.text(f"Expecting {filesize} bytes")
-        
-#         received_bytes = 0
-#         expected_seq = 0
-#         data_chunks = []
-#         total_packets = (filesize + BUFFER_SIZE - 1) // BUFFER_SIZE if filesize > 0 else 0
-        
-#         while received_bytes < filesize:
-#             try:
-#                 # Receive packet header (ensure we get all 8 bytes)
-#                 header = b''
-#                 while len(header) < PACKET_HEADER_SIZE:
-#                     chunk = sock.recv(PACKET_HEADER_SIZE - len(header))
-#                     if not chunk:
-#                         status_text.text("Connection closed while receiving header")
-#                         break
-#                     header += chunk
-                
-#                 if len(header) != PACKET_HEADER_SIZE:
-#                     break
-                
-#                 seq_num = int.from_bytes(header[:4], byteorder='big')
-#                 data_len = int.from_bytes(header[4:8], byteorder='big')
-                
-#                 # Check for end-of-transmission marker
-#                 if seq_num == 0xFFFFFFFF and data_len == 0:
-#                     status_text.text("Download completed successfully!")
-#                     break
-                
-#                 # Receive data (ensure we get all bytes)
-#                 data = b''
-#                 while len(data) < data_len:
-#                     chunk = sock.recv(data_len - len(data))
-#                     if not chunk:
-#                         status_text.text("Connection closed while receiving data")
-#                         break
-#                     data += chunk
-                
-#                 if len(data) != data_len:
-#                     status_text.text(f"Data length mismatch: expected {data_len}, got {len(data)}")
-#                     continue
-                
-#                 status_text.text(f"Receiving packet {seq_num + 1}/{total_packets}")
-                
-#                 # Check sequence number
-#                 if seq_num == expected_seq:
-#                     data_chunks.append(data)
-#                     received_bytes += len(data)
-#                     if not send_ack(sock, seq_num):
-#                         status_text.text(f"Failed to send ACK for packet {seq_num}")
-#                         break
-#                     expected_seq += 1
-#                     if filesize > 0:
-#                         progress_bar.progress(received_bytes / filesize)
-#                 else:
-#                     status_text.text(f"Sequence error: expected {expected_seq}, got {seq_num}")
-#                     # Send ACK for last correctly received packet
-#                     if expected_seq > 0:
-#                         send_ack(sock, expected_seq - 1)
-                
-#             except Exception as e:
-#                 status_text.text(f"Error receiving packet: {e}")
-#                 break
-        
-#         progress_bar.progress(1.0)
-#         return b''.join(data_chunks)
-#     except Exception as e:
-#         status_text.text(f"Download failed: {e}")
-#         return b''
+def log_message(message):
+    print(message)
+    with open(LOG_FILE, "a") as f:
+        f.write(f"{message}\n")
 
-def send_ack(sock, seq_num):
-    """Send ACK for received packet"""
-    try:
-        ack_data = seq_num.to_bytes(4, byteorder='big')
-        sock.sendall(ack_data)
-        print(f"[ACK] Sent ACK for packet {seq_num}")
-        return True
-    except Exception as e:
-        print(f"[ERROR] Failed to send ACK for packet {seq_num}: {e}")
-        return False
 
-def receive_ack(sock, expected_seq):
-    """Receive and validate ACK"""
-    try:
-        sock.settimeout(TIMEOUT)
-        ack_data = b''
-        start_time = time.time()
-        while len(ack_data) < ACK_SIZE:
-            if time.time() - start_time > TIMEOUT:
-                print(f"[TIMEOUT] Waiting for ACK {expected_seq}")
-                return False
-            chunk = sock.recv(ACK_SIZE - len(ack_data))
-            if not chunk:
-                print(f"[ERROR] Connection closed while waiting for ACK {expected_seq}")
-                return False
-            ack_data += chunk
-        
-        received_seq = int.from_bytes(ack_data, byteorder='big')
-        if received_seq != expected_seq:
-            print(f"[ERROR] Expected ACK {expected_seq}, got {received_seq}")
-            return False
-        print(f"[ACK] Received ACK for packet {expected_seq}")
-        return True
-    except Exception as e:
-        print(f"[ERROR] Receiving ACK {expected_seq}: {e}")
-        return False
-    finally:
-        sock.settimeout(None)
+def send_ack(sock, ack_num):
+    sock.sendall(ack_num.to_bytes(4, 'big'))
+    log_message(f"[CLIENT] Sent ACK {ack_num}")
+
+def receive_ack(sock):
+    ack_data = b''
+    while len(ack_data) < 4:
+        chunk = sock.recv(4 - len(ack_data))
+        if not chunk:
+            raise ConnectionResetError("Connection closed while waiting for ACK")
+        ack_data += chunk
+    return int.from_bytes(ack_data, 'big')
+
 
 def send_with_ack(sock, file_bytes, progress_bar, status_text):
-    """Send file with packet-by-packet ACK system"""
-    try:
-        total_size = len(file_bytes)
-        sock.sendall(str(total_size).encode().ljust(16))
-        status_text.text(f"Sending file size: {total_size} bytes")
-        
-        seq_num = 0
-        offset = 0
-        total_packets = (total_size + BUFFER_SIZE - 1) // BUFFER_SIZE
-        
-        while offset < total_size:
-            remaining = total_size - offset
-            chunk_size = min(BUFFER_SIZE, remaining)
-            data = file_bytes[offset:offset + chunk_size]
-            
-            packet_header = seq_num.to_bytes(4, byteorder='big') + len(data).to_bytes(4, byteorder='big')
-            
-            retry_count = 0
-            ack_received = False
-            
-            while retry_count < MAX_RETRIES and not ack_received:
-                try:
-                    sock.sendall(packet_header)
-                    sock.sendall(data)
-                    print(f"[CLIENT] Sent Packet {seq_num} | Size: {len(data)} bytes | Attempt {retry_count + 1}")
-                    status_text.text(f"Sending packet {seq_num + 1}/{total_packets} (Attempt {retry_count + 1})")
-                    
-                    ack_received = receive_ack(sock, seq_num)
-                    if ack_received:
-                        print(f"[CLIENT] Received ACK for Packet {seq_num}")
-                        offset += len(data)
-                        seq_num += 1
-                        progress_bar.progress(offset / total_size)
-                        break
-                    else:
-                        retry_count += 1
-                        print(f"[CLIENT] Retrying Packet {seq_num} | Attempt {retry_count + 1}")
-                        if retry_count < MAX_RETRIES:
-                            status_text.text(f"Retrying packet {seq_num + 1}, attempt {retry_count + 1}")
-                except Exception as e:
-                    retry_count += 1
-                    print(f"[CLIENT] Error sending Packet {seq_num}: {e}")
-                    status_text.text(f"Error sending packet {seq_num}: {e}")
-            
-            if not ack_received:
-                print(f"[CLIENT] Failed to send Packet {seq_num} after {MAX_RETRIES} attempts")
-                status_text.text(f"Failed to send packet {seq_num} after {MAX_RETRIES} attempts")
-                return False
-        
-        end_packet = (0xFFFFFFFF).to_bytes(4, byteorder='big') + (0).to_bytes(4, byteorder='big')
-        sock.sendall(end_packet)
-        status_text.text("Upload completed successfully!")
-        print("[CLIENT] Upload completed successfully!")
-        progress_bar.progress(1.0)
-        return True
-    except Exception as e:
-        status_text.text(f"Upload failed: {e}")
-        print(f"[CLIENT] Upload failed: {e}")
-        return False
+    total_size = len(file_bytes)
+    total_packets = (total_size + BUFFER_SIZE - 1) // BUFFER_SIZE
 
+    sock.sendall(str(total_size).encode().ljust(16))
+    status_text.text(f"Sent file size: {total_size}")
 
-#before pkt loss
-def receive_with_ack(sock, progress_bar, status_text):
-    """Receive file with packet-by-packet ACK system"""
-    try:
-        filesize_data = b''
-        start_time = time.time()
-        while len(filesize_data) < 16:
-            if time.time() - start_time > TIMEOUT:
-                status_text.text("Timeout receiving file size")
-                print(f"[CLIENT] Timeout receiving file size")
-                return b''
-            chunk = sock.recv(16 - len(filesize_data))
-            if not chunk:
-                status_text.text("Connection closed while receiving file size")
-                print(f"[CLIENT] Connection closed while receiving file size")
-                return b''
-            filesize_data += chunk
-        
-        filesize = int(filesize_data.decode().strip())
-        status_text.text(f"Expecting {filesize} bytes")
-        
-        received_bytes = 0
-        expected_seq = 0
-        data_chunks = []
-        total_packets = (filesize + BUFFER_SIZE - 1) // BUFFER_SIZE if filesize > 0 else 0
-        
-        while received_bytes < filesize:
-            header = b''
-            start_time = time.time()
-            while len(header) < PACKET_HEADER_SIZE:
-                if time.time() - start_time > TIMEOUT:
-                    status_text.text("Timeout receiving packet header")
-                    print(f"[CLIENT] Timeout receiving packet header")
-                    break
-                chunk = sock.recv(PACKET_HEADER_SIZE - len(header))
-                if not chunk:
-                    status_text.text("Connection closed while receiving header")
-                    print(f"[CLIENT] Connection closed while receiving header")
-                    return b''.join(data_chunks)
-                header += chunk
-            
-            if len(header) != PACKET_HEADER_SIZE:
-                break
-            
-            seq_num = int.from_bytes(header[:4], byteorder='big')
-            data_len = int.from_bytes(header[4:8], byteorder='big')
-            
-            if seq_num == 0xFFFFFFFF and data_len == 0:
-                status_text.text("Download completed successfully!")
-                print("[CLIENT] Download completed successfully!")
-                break
-            
-            data = b''
-            start_time = time.time()
-            while len(data) < data_len:
-                if time.time() - start_time > TIMEOUT:
-                    status_text.text(f"Timeout receiving data for packet {seq_num}")
-                    print(f"[CLIENT] Timeout receiving data for packet {seq_num}")
-                    break
-                chunk = sock.recv(data_len - len(data))
-                if not chunk:
-                    status_text.text(f"Connection closed while receiving data for packet {seq_num}")
-                    print(f"[CLIENT] Connection closed while receiving data for packet {seq_num}")
-                    break
-                data += chunk
-            
-            if len(data) != data_len:
-                status_text.text(f"Data length mismatch: expected {data_len}, got {len(data)}")
-                print(f"[CLIENT] Data length mismatch: expected {data_len}, got {len(data)}")
-                send_ack(sock, expected_seq - 1 if expected_seq > 0 else 0)
+    packets = []
+    for seq_num in range(total_packets):
+        start = seq_num * BUFFER_SIZE
+        end = min(start + BUFFER_SIZE, total_size)
+        data = file_bytes[start:end]
+        header = seq_num.to_bytes(4, 'big') + len(data).to_bytes(4, 'big')
+        packets.append((seq_num, header + data))
+
+    # ✅ Randomly choose 6 unique packets to drop once (no repeats)
+    LOSS_PACKETS = set(random.sample(range(total_packets), min(6, total_packets)))
+    dropped_once = set()
+    log_message(f"[CLIENT] Random LOSS_PACKETS selected: {sorted(LOSS_PACKETS)}")
+
+    base = 0
+    next_seq = 0
+    timers = {}
+    dup_acks = defaultdict(int)
+    sock.settimeout(TIMEOUT)
+
+    # TCP Reno variables
+    cwnd = 1
+    ssthresh = 16
+    reno_state = "Slow Start"
+    recover_point = None
+
+    log_message(f"[CLIENT][CC] cwnd={cwnd:.2f} ssthresh={ssthresh:.2f} state={reno_state}")
+
+    while base < total_packets:
+        while next_seq < base + int(cwnd) and next_seq < total_packets:
+            seq, pkt_data = packets[next_seq]
+            if seq in LOSS_PACKETS and seq not in dropped_once:
+                log_message(f"[CLIENT] Intentionally dropping Packet {seq}")
+                dropped_once.add(seq)
+                timers[seq] = time.time()
+                next_seq += 1
                 continue
-            
-            status_text.text(f"Receiving packet {seq_num + 1}/{total_packets}")
-            print(f"[CLIENT] Receiving Packet {seq_num} | Size: {len(data)} bytes")
-            
-            if seq_num == expected_seq:
-                data_chunks.append(data)
-                received_bytes += len(data)
-                if not send_ack(sock, seq_num):
-                    status_text.text(f"Failed to send ACK for packet {seq_num}")
-                    print(f"[CLIENT] Failed to send ACK for packet {seq_num}")
-                    break
-                expected_seq += 1
-                if filesize > 0:
-                    progress_bar.progress(received_bytes / filesize)
+            sock.sendall(pkt_data)
+            log_message(f"[CLIENT] Sent Packet {seq}")
+            timers[seq] = time.time()
+            next_seq += 1
+
+        try:
+            ack_num = receive_ack(sock)
+            log_message(f"[CLIENT] Received ACK {ack_num}")
+
+            if ack_num >= base:
+                base = ack_num + 1
+                for i in list(timers):
+                    if i <= ack_num:
+                        timers.pop(i, None)
+                dup_acks.clear()
+
+                # ✅ Fast Recovery exit condition
+                if reno_state == "Fast Recovery" and ack_num >= recover_point:
+                    cwnd = ssthresh
+                    reno_state = "Congestion Avoidance"
+                    log_message(f"[CLIENT][CC] Exit FR: cwnd={cwnd:.2f} ssthresh={ssthresh:.2f} state={reno_state}")
+
+                # Regular cwnd increase
+                if reno_state == "Slow Start":
+                    cwnd += 1
+                    if cwnd >= ssthresh:
+                        reno_state = "Congestion Avoidance"
+                elif reno_state == "Congestion Avoidance":
+                    cwnd += 1 / cwnd
+                elif reno_state == "Fast Recovery":
+                    cwnd = cwnd  # Stay fixed in FR unless we exit
+
+                log_message(f"[CLIENT][CC] cwnd={cwnd:.2f} ssthresh={ssthresh:.2f} state={reno_state}")
+                progress_bar.progress(min(base / total_packets, 1.0))
+
             else:
-                status_text.text(f"Sequence error: expected {expected_seq}, got {seq_num}")
-                print(f"[CLIENT] Sequence error: expected {expected_seq}, got {seq_num}")
-                send_ack(sock, expected_seq - 1 if expected_seq > 0 else 0)
-        
-        progress_bar.progress(1.0)
-        return b''.join(data_chunks)
-    except Exception as e:
-        status_text.text(f"Download failed: {e}")
-        print(f"[CLIENT] Download failed: {e}")
-        return b''
->>>>>>> amina
+                dup_acks[ack_num] += 1
+                if dup_acks[ack_num] >= 3 and reno_state != "Fast Recovery":
+                    ssthresh = max(cwnd / 2, 2)
+                    cwnd = ssthresh + 3
+                    reno_state = "Fast Recovery"
+                    recover_point = next_seq - 1
+                    log_message(f"[CLIENT][CC] DUPACK threshold: cwnd={cwnd:.2f} ssthresh={ssthresh:.2f} state={reno_state}")
 
-def receive_with_progress(sock, filesize, progress_bar):
-    received = 0
-    chunks = []
-    while received < filesize:
-        chunk = sock.recv(min(BUFFER_SIZE, filesize - received))
-        if not chunk:
-            break
-        chunks.append(chunk)
-        received += len(chunk)
-        progress_bar.progress(received / filesize)
+                    resend_seq = ack_num + 1
+                    if resend_seq < total_packets:
+                        log_message(f"[CLIENT] Fast retransmit of Packet {resend_seq}")
+                        sock.sendall(packets[resend_seq][1])
+                        timers[resend_seq] = time.time()
+                    dup_acks[ack_num] = 0
+
+        except socket.timeout:
+            now = time.time()
+            for seq in range(base, next_seq):
+                if seq in timers and now - timers[seq] >= TIMEOUT:
+                    ssthresh = max(cwnd / 2, 2)
+                    cwnd = ssthresh
+                    reno_state = "Slow Start"
+                    log_message(f"[CLIENT][CC] TIMEOUT: cwnd={cwnd:.2f} ssthresh={ssthresh:.2f} state={reno_state}")
+
+                    log_message(f"[CLIENT] Timeout retransmit of Packet {seq}")
+                    sock.sendall(packets[seq][1])
+                    timers[seq] = time.time()
+                    status_text.text(f"Timeout! Resending from Packet {seq}")
+
+    sock.sendall((0xFFFFFFFF).to_bytes(4, 'big') + (0).to_bytes(4, 'big'))
+    time.sleep(0.1)
+    status_text.text("Upload complete!")
     progress_bar.progress(1.0)
-    return b''.join(chunks)
 
-#after pkt loss
+    return True
 
+def receive_with_ack(sock, progress_bar, status_text):
+    filesize = int(sock.recv(16).decode().strip())
+    buffer = {}
+    expected_seq = 0
+    received_bytes = 0
 
-# def main():
+    while received_bytes < filesize:
+        header = sock.recv(PACKET_HEADER_SIZE)
+        if not header:
+            raise ConnectionResetError("Connection closed while receiving header")
+        seq_num = int.from_bytes(header[:4], 'big')
+        data_len = int.from_bytes(header[4:], 'big')
 
+        if seq_num == 0xFFFFFFFF and data_len == 0:
+            break
 
-#     st.title("📄 Multi-Format File Converter (Enhanced with Packet ACK)")
-    
-#     # Display protocol information
-#     with st.expander("📊 Protocol Information"):
-#         st.write(f"**Packet Size:** {BUFFER_SIZE} bytes")
-#         st.write(f"**Max Retries:** {MAX_RETRIES}")
-#         st.write(f"**Timeout:** {TIMEOUT} seconds")
-#         st.write(f"**Server:** {HOST}:{PORT}")
-    
-#     uploaded_file = st.file_uploader("Upload your file", type=list(ALLOWED_CONVERSIONS.keys()))
+        data = b''
+        while len(data) < data_len:
+            chunk = sock.recv(data_len - len(data))
+            if not chunk:
+                raise ConnectionResetError("Connection closed during data reception")
+            data += chunk
 
-#     output_format = None
-#     if uploaded_file:
-#         file_ext = os.path.splitext(uploaded_file.name)[1].lower()
-#         allowed_outputs = ALLOWED_CONVERSIONS.get(file_ext, [])
+        buffer[seq_num] = data
 
-#         if not allowed_outputs:
-#             st.error("Unsupported file type.")
-#             return
-#         else:
-#             output_format = st.selectbox("Select output format", allowed_outputs)
+        if seq_num == expected_seq:
+            while expected_seq in buffer:
+                expected_seq += 1
+        send_ack(sock, expected_seq - 1)
+        received_bytes += len(data)
+        progress_bar.progress(min(received_bytes / filesize, 1.0))
 
-#     if uploaded_file and output_format:
-#         filename = uploaded_file.name
-#         file_bytes = uploaded_file.read()
-        
-#         st.info(f"📄  **File:** {filename}")
-#         st.info(f"📏  **Size:** {len(file_bytes):,} bytes")
-#         st.info(f"🔄 **Converting to:** {output_format.upper()}")
-        
-#         # Calculate expected packets
-#         expected_packets = (len(file_bytes) + BUFFER_SIZE - 1) // BUFFER_SIZE
-#         st.info(f"📦 **Expected packets:** {expected_packets}")
+    return b''.join(buffer[seq] for seq in sorted(buffer))
 
-#         if st.button("Upload and Convert"):
-#             sock = None
-#             try:
-#                 sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-#                 sock.settimeout(30.0)  # Set overall connection timeout
-#                 sock.connect((HOST, PORT))
-#                 sock.settimeout(None)  # Remove timeout for normal operations
-                
-#                 # Send filename length and name
-#                 filename_len_data = str(len(filename)).encode().ljust(4)
-#                 sock.sendall(filename_len_data)
-#                 sock.sendall(filename.encode())
+def generate_qr_code(url):
+    qr = qrcode.QRCode(version=1, box_size=8, border=2)
+    qr.add_data(url)
+    qr.make(fit=True)
+    img = qr.make_image(fill_color="black", back_color="white")
+    buf = BytesIO()
+    img.save(buf, format='PNG')
+    buf.seek(0)
+    return buf
 
-#                 # Send output format (up to 8 bytes)
-#                 output_format_data = output_format.encode().ljust(8)
-#                 sock.sendall(output_format_data)
-
-#                 # Upload phase
-#                 st.subheader("📤 Upload Progress")
-#                 upload_progress = st.progress(0)
-#                 upload_status = st.empty()
-                
-#                 upload_start = time.time()
-#                 upload_success = send_with_ack(sock, file_bytes, upload_progress, upload_status)
-#                 upload_end = time.time()
-                
-#                 if not upload_success:
-#                     st.error("Upload failed!")
-#                     return
-
-#                 # Wait for conversion response
-#                 st.subheader("⚙️ Conversion Progress")
-#                 conversion_status = st.empty()
-#                 conversion_status.text("Waiting for server response...")
-                
-#                 # Set timeout for server response
-#                 sock.settimeout(600.0)
-#                 response_data = b''
-#                 while len(response_data) < 2:
-#                     chunk = sock.recv(2 - len(response_data))
-#                     if not chunk:
-#                         st.error("Connection closed while waiting for server response")
-#                         return
-#                     response_data += chunk
-#                 sock.settimeout(None)
-                
-#                 if response_data != b"OK":
-#                     st.error(f"Conversion failed. Server response: {response_data}")
-#                     return
-
-#                 conversion_status.text("Conversion completed successfully!")
-
-#                 # Download phase
-#                 st.subheader("📥 Download Progress")
-                
-#                 # Receive filename with better error handling
-#                 name_len_data = b''
-#                 while len(name_len_data) < 4:
-#                     chunk = sock.recv(4 - len(name_len_data))
-#                     if not chunk:
-#                         st.error("Connection closed while receiving filename length")
-#                         return
-#                     name_len_data += chunk
-                
-#                 name_len = int(name_len_data.decode().strip())
-                
-#                 converted_name_data = b''
-#                 while len(converted_name_data) < name_len:
-#                     chunk = sock.recv(name_len - len(converted_name_data))
-#                     if not chunk:
-#                         st.error("Connection closed while receiving filename")
-#                         return
-#                     converted_name_data += chunk
-                
-#                 converted_name = converted_name_data.decode()
-
-#                 download_progress = st.progress(0)
-#                 download_status = st.empty()
-                
-#                 download_start = time.time()
-#                 converted_bytes = receive_with_ack(sock, download_progress, download_status)
-#                 download_end = time.time()
-                
-#                 if not converted_bytes:
-#                     st.error("Failed to receive converted file")
-#                     return
-
-#                 # Receive timing information with better error handling
-#                 timing_data = {}
-#                 timing_labels = ['upload', 'download', 'conversion']
-                
-#                 for label in timing_labels:
-#                     try:
-#                         data = b''
-#                         while len(data) < 16:
-#                             chunk = sock.recv(16 - len(data))
-#                             if not chunk:
-#                                 st.warning(f"Connection closed while receiving {label} timing")
-#                                 break
-#                             data += chunk
-                        
-#                         if len(data) == 16:
-#                             timing_data[label] = float(data.decode().strip())
-#                         else:
-#                             timing_data[label] = 0.0
-#                     except Exception as e:
-#                         st.warning(f"Failed to parse {label} timing: {e}")
-#                         timing_data[label] = 0.0
-
-#                 # Display results
-#                 st.success("ðŸŽ‰ Conversion completed successfully!")
-                
-#                 col1, col2 = st.columns(2)
-#                 with col1:
-#                     st.metric("📤 Upload Time (Client)", f"{upload_end - upload_start:.2f}s")
-#                     st.metric("📤  Download Time (Client)", f"{download_end - download_start:.2f}s")
-#                     st.metric("📦 Total Packets", expected_packets)
-                
-#                 with col2:
-#                     st.metric("📤Upload Time (Server)", f"{timing_data.get('upload', 0):.2f}s")
-#                     st.metric("📤Download Time (Server)", f"{timing_data.get('download', 0):.2f}s")
-#                     st.metric("⚙️ Conversion Time", f"{timing_data.get('conversion', 0):.2f}s")
-
-#                 st.download_button(
-#                     label="💾 Download Converted File",
-#                     data=converted_bytes,
-#                     file_name=converted_name,
-#                     mime='application/octet-stream'
-#                 )
-
-#             except Exception as e:
-#                 st.error(f"❌ Connection failed: {e}")
-#                 import traceback
-#                 st.text(traceback.format_exc())
-#             finally:
-#                 if sock:
-#                     try:
-#                         sock.close()
-#                     except:
-#                         pass
 
 def main():
-<<<<<<< HEAD
-    st.title("📄 Multi-Format File Converter")
-=======
-    st.title("📄 Multi-Format File Converter (Enhanced with Packet ACK)")
+    st.title("📄 FileFusion (Secure File Converter)")
 
-    # Display protocol information
     with st.expander("📊 Protocol Information"):
         st.write(f"**Packet Size:** {BUFFER_SIZE} bytes")
-        st.write(f"**Max Retries:** {MAX_RETRIES}")
+        st.write(f"**Window Size:** {WINDOW_SIZE}")
         st.write(f"**Timeout:** {TIMEOUT} seconds")
         st.write(f"**Server:** {HOST}:{PORT}")
 
->>>>>>> amina
-    uploaded_file = st.file_uploader("Upload your file", type=list(ALLOWED_CONVERSIONS.keys()))
+    uploaded_file = st.file_uploader("Upload your file", type=[".doc", ".docx", ".odt", ".pptx"])
 
     output_format = None
     if uploaded_file:
         file_ext = os.path.splitext(uploaded_file.name)[1].lower()
-        allowed_outputs = ALLOWED_CONVERSIONS.get(file_ext, [])
-
-        if not allowed_outputs:
-            st.error("Unsupported file type.")
-            return
-        else:
-            output_format = st.selectbox("Select output format", allowed_outputs)
+        allowed_outputs = ["pdf", "docx", "odt"]
+        output_format = st.selectbox("Select output format", allowed_outputs)
 
     if uploaded_file and output_format:
         filename = uploaded_file.name
         file_bytes = uploaded_file.read()
-<<<<<<< HEAD
-=======
 
         st.info(f"📄  **File:** {filename}")
         st.info(f"📏  **Size:** {len(file_bytes):,} bytes")
@@ -642,137 +234,118 @@ def main():
 
         expected_packets = (len(file_bytes) + BUFFER_SIZE - 1) // BUFFER_SIZE
         st.info(f"📦 **Expected packets:** {expected_packets}")
->>>>>>> amina
 
         if st.button("Upload and Convert"):
+            sock = None
             try:
-                sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-<<<<<<< HEAD
-                sock.connect((HOST, PORT))
-=======
-                sock.settimeout(30.0)
-                sock.connect((HOST, PORT))
-                sock.settimeout(None)
->>>>>>> amina
+                with st.spinner("Connecting to secure server..."):
+                    raw_sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+                    context = ssl._create_unverified_context()
+                    sock = context.wrap_socket(raw_sock, server_hostname=HOST)
+                    sock.settimeout(30.0)
+                    sock.connect((HOST, PORT))
+                    sock.settimeout(None)
 
-                # Send filename length and name
-                sock.sendall(str(len(filename)).encode().ljust(4))
-                sock.sendall(filename.encode())
+                    sock.sendall(str(len(filename)).encode().ljust(4))
+                    sock.sendall(filename.encode())
+                    sock.sendall(output_format.encode().ljust(8))
 
-<<<<<<< HEAD
-                # Send output format (up to 8 bytes)
-                sock.sendall(output_format.encode().ljust(8))
-
-                # Send file size
-                sock.sendall(str(len(file_bytes)).encode().ljust(16))
-
-                st.info("Uploading...")
-                upload_bar = st.progress(0)
-                send_with_progress(sock, file_bytes, upload_bar)
-
-                response = sock.recv(2)
-                if response != b"OK":
-                    st.error("Conversion failed. Server may not support this format.")
-                    sock.close()
-                    return
-
-                # Receive filename
-                name_len = int(sock.recv(4).decode().strip())
-                converted_name = sock.recv(name_len).decode()
-=======
-                # Send output format
-                sock.sendall(output_format.encode().ljust(8))
-
-                # Upload
                 st.subheader("📤 Upload Progress")
                 upload_progress = st.progress(0)
                 upload_status = st.empty()
 
-                upload_success = send_with_ack(sock, file_bytes, upload_progress, upload_status)
-                # upload_success = send_with_ack(sock, file_bytes)
-                if not upload_success:
-                    st.error("Upload failed!")
+                upload_start = time.time()
+                success = send_with_ack(sock, file_bytes, upload_progress, upload_status)
+                upload_end = time.time()
+
+                if not success:
+                    st.error("❌ Upload failed")
                     return
 
-                # Wait for server response
                 st.subheader("⚙️ Conversion Progress")
                 conversion_status = st.empty()
                 conversion_status.text("Waiting for server response...")
 
                 sock.settimeout(600.0)
-                response_data = b''
-                while len(response_data) < 2:
-                    chunk = sock.recv(2 - len(response_data))
-                    if not chunk:
-                        st.error("Connection closed while waiting for server response")
-                        return
-                    response_data += chunk
+                response = sock.recv(2)
                 sock.settimeout(None)
 
-                if response_data != b"OK":
-                    st.error(f"Conversion failed. Server response: {response_data}")
+                if response != b"OK":
+                    st.error("❌ Conversion failed on server")
                     return
->>>>>>> amina
 
-                # Receive file size
-                converted_size = int(sock.recv(16).decode().strip())
-                st.info(f"Downloading {converted_name}")
-                download_bar = st.progress(0)
-                converted_bytes = receive_with_progress(sock, converted_size, download_bar)
+                conversion_status.text("Conversion completed successfully!")
 
-<<<<<<< HEAD
-                upload_time_server = float(sock.recv(16).decode().strip())
-                download_time_server = float(sock.recv(16).decode().strip())
-
-                sock.close()
-
-                st.success("Conversion successful!")
-                st.write(f"Upload time: {upload_time_server:.2f} s")
-                st.write(f"Download time: {download_time_server:.2f} s")
-=======
-                # Download
                 st.subheader("📥 Download Progress")
-                name_len_data = b''
-                while len(name_len_data) < 4:
-                    chunk = sock.recv(4 - len(name_len_data))
-                    if not chunk:
-                        st.error("Connection closed while receiving filename length")
-                        return
-                    name_len_data += chunk
-
-                name_len = int(name_len_data.decode().strip())
-
-                converted_name_data = b''
-                while len(converted_name_data) < name_len:
-                    chunk = sock.recv(name_len - len(converted_name_data))
-                    if not chunk:
-                        st.error("Connection closed while receiving filename")
-                        return
-                    converted_name_data += chunk
-
-                converted_name = converted_name_data.decode()
+                name_len = int(sock.recv(4).decode().strip())
+                converted_name = sock.recv(name_len).decode()
 
                 download_progress = st.progress(0)
                 download_status = st.empty()
-                converted_bytes = receive_with_ack(sock, download_progress, download_status)
+                download_start = time.time()
+                converted_data = receive_with_ack(sock, download_progress, download_status)
+                download_end = time.time()
 
-                if not converted_bytes:
-                    st.error("Failed to receive converted file")
+                if not converted_data:
+                    st.error("❌ Failed to receive converted file")
                     return
 
-                # Success message only
                 st.success("🎉 Conversion completed successfully!")
->>>>>>> amina
+
+                col1, col2 = st.columns(2)
+                with col1:
+                    st.metric("📤 Upload Time (Client)", f"{upload_end - upload_start:.2f}s")
+                    st.metric("📥 Download Time (Client)", f"{download_end - download_start:.2f}s")
+                    st.metric("📦 Total Packets", expected_packets)
 
                 st.download_button(
-                    label="Download Converted File",
-                    data=converted_bytes,
+                    label="💾 Download Converted File",
+                    data=converted_data,
                     file_name=converted_name,
                     mime='application/octet-stream'
                 )
 
+                # ✅ Save conversion result to session_state for later sharing
+                st.session_state['converted_name'] = converted_name
+                st.session_state['converted_data'] = converted_data
+
+                # ✅ Also save a local copy in static_downloads
+                os.makedirs("static_downloads", exist_ok=True)
+                shared_path = os.path.join("static_downloads", converted_name)
+                with open(shared_path, "wb") as f:
+                    f.write(converted_data)
+
             except Exception as e:
-                st.error(f"Connection failed: {e}")
+                st.error(f"❌ Connection failed: {e}")
+                import traceback
+                st.text(traceback.format_exc())
+            finally:
+                if sock:
+                    try:
+                        sock.close()
+                    except:
+                        pass
+
+    # ✅ Always show share section if we have a converted file
+    if 'converted_name' in st.session_state and 'converted_data' in st.session_state:
+        st.subheader("📲 Share via QR code on local network")
+        with st.expander("Share your file"):
+            if "lan_ip" not in st.session_state:
+                st.session_state['lan_ip'] = "192.168.1.100"
+
+            lan_ip = st.text_input(
+                "Enter your computer's LAN IP:",
+                value=st.session_state['lan_ip'],
+                key="lan_ip"
+            )
+
+            converted_name = st.session_state['converted_name']
+            encoded_name = quote(converted_name)
+            share_url = f"http://{lan_ip}:8000/{encoded_name}"
+
+            st.markdown(f"🔗 **Direct Link:** [{share_url}]({share_url})")
+            qr_buf = generate_qr_code(share_url)
+            st.image(qr_buf, caption="Scan this QR on your phone to download", use_container_width=False)
 
 
 if __name__ == "__main__":
