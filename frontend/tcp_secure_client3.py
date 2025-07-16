@@ -7,7 +7,7 @@ from collections import defaultdict
 import qrcode
 from io import BytesIO
 from urllib.parse import quote
-
+import random
 
 timestamp = int(time.time())
 LOG_DIR = "../logs"
@@ -194,6 +194,127 @@ def receive_ack(sock):
 #     progress_bar.progress(1.0)
 #     return True
 
+# def send_with_ack(sock, file_bytes, progress_bar, status_text):
+#     total_size = len(file_bytes)
+#     total_packets = (total_size + BUFFER_SIZE - 1) // BUFFER_SIZE
+
+#     sock.sendall(str(total_size).encode().ljust(16))
+#     status_text.text(f"Sent file size: {total_size}")
+
+#     packets = []
+#     for seq_num in range(total_packets):
+#         start = seq_num * BUFFER_SIZE
+#         end = min(start + BUFFER_SIZE, total_size)
+#         data = file_bytes[start:end]
+#         header = seq_num.to_bytes(4, 'big') + len(data).to_bytes(4, 'big')
+#         packets.append((seq_num, header + data))
+
+#     base = 0
+#     next_seq = 0
+#     timers = {}
+#     dup_acks = defaultdict(int)
+#     sock.settimeout(TIMEOUT)
+
+#     # TCP Reno variables
+#     cwnd = 1
+#     ssthresh = 16
+#     reno_state = "Slow Start"
+#     recover_point = None
+
+#     LOSS_PACKETS = {10, 50}
+#     dropped_once = set()
+
+#     log_message(f"[CLIENT][CC] cwnd={cwnd:.2f} ssthresh={ssthresh:.2f} state={reno_state}")
+
+#     while base < total_packets:
+#         while next_seq < base + int(cwnd) and next_seq < total_packets:
+#             seq, pkt_data = packets[next_seq]
+#             if seq in LOSS_PACKETS and seq not in dropped_once:
+#                 log_message(f"[CLIENT] Intentionally dropping Packet {seq}")
+#                 dropped_once.add(seq)
+#                 timers[seq] = time.time()
+#                 next_seq += 1
+#                 continue
+#             sock.sendall(pkt_data)
+#             log_message(f"[CLIENT] Sent Packet {seq}")
+#             timers[seq] = time.time()
+#             next_seq += 1
+
+#         try:
+#             ack_num = receive_ack(sock)
+#             log_message(f"[CLIENT] Received ACK {ack_num}")
+
+#             if ack_num >= base:
+#                 base = ack_num + 1
+#                 for i in list(timers):
+#                     if i <= ack_num:
+#                         timers.pop(i, None)
+#                 dup_acks.clear()
+
+#                 # ✅ Fast Recovery exit condition
+#                 if reno_state == "Fast Recovery" and ack_num >= recover_point:
+#                     cwnd = ssthresh
+#                     reno_state = "Congestion Avoidance"
+#                     log_message(f"[CLIENT][CC] Exit FR: cwnd={cwnd:.2f} ssthresh={ssthresh:.2f} state={reno_state}")
+
+#                 # Regular cwnd increase
+#                 if reno_state == "Slow Start":
+#                     cwnd += 1
+#                     if cwnd >= ssthresh:
+#                         reno_state = "Congestion Avoidance"
+#                 elif reno_state == "Congestion Avoidance":
+#                     cwnd += 1 / cwnd
+#                 elif reno_state == "Fast Recovery":
+#                     cwnd = cwnd  # Stay fixed in FR unless we exit
+
+#                 log_message(f"[CLIENT][CC] cwnd={cwnd:.2f} ssthresh={ssthresh:.2f} state={reno_state}")
+#                 progress_bar.progress(min(base / total_packets, 1.0))
+
+#             else:
+#                 dup_acks[ack_num] += 1
+#                 if dup_acks[ack_num] >= 3 and reno_state != "Fast Recovery":
+#                     ssthresh = max(cwnd / 2, 2)
+#                     cwnd = ssthresh + 3
+#                     reno_state = "Fast Recovery"
+#                     recover_point = next_seq - 1
+#                     log_message(f"[CLIENT][CC] DUPACK threshold: cwnd={cwnd:.2f} ssthresh={ssthresh:.2f} state={reno_state}")
+
+#                     resend_seq = ack_num + 1
+#                     if resend_seq < total_packets:
+#                         log_message(f"[CLIENT] Fast retransmit of Packet {resend_seq}")
+#                         sock.sendall(packets[resend_seq][1])
+#                         timers[resend_seq] = time.time()
+#                     dup_acks[ack_num] = 0
+
+#         except socket.timeout:
+#             now = time.time()
+#             for seq in range(base, next_seq):
+#                 if seq in timers and now - timers[seq] >= TIMEOUT:
+#                     ssthresh = max(cwnd / 2, 2)
+#                     cwnd = 1
+#                     reno_state = "Slow Start"
+#                     log_message(f"[CLIENT][CC] TIMEOUT: cwnd={cwnd:.2f} ssthresh={ssthresh:.2f} state={reno_state}")
+
+#                     log_message(f"[CLIENT] Timeout retransmit of Packet {seq}")
+#                     sock.sendall(packets[seq][1])
+#                     timers[seq] = time.time()
+#                     status_text.text(f"Timeout! Resending from Packet {seq}")
+
+#     sock.sendall((0xFFFFFFFF).to_bytes(4, 'big') + (0).to_bytes(4, 'big'))
+#     time.sleep(0.1)
+#     status_text.text("Upload complete!")
+#     progress_bar.progress(1.0)
+
+#     # # ✅ Send the client log to server
+#     # with open(LOG_FILE, "r") as f:
+#     #     log_data = f.read()
+
+#     # log_bytes = log_data.encode()
+#     # sock.sendall(str(len(log_bytes)).encode().ljust(16))
+#     # sock.sendall(log_bytes)
+    
+#     return True
+
 def send_with_ack(sock, file_bytes, progress_bar, status_text):
     total_size = len(file_bytes)
     total_packets = (total_size + BUFFER_SIZE - 1) // BUFFER_SIZE
@@ -209,6 +330,11 @@ def send_with_ack(sock, file_bytes, progress_bar, status_text):
         header = seq_num.to_bytes(4, 'big') + len(data).to_bytes(4, 'big')
         packets.append((seq_num, header + data))
 
+    # ✅ Randomly choose 6 unique packets to drop once (no repeats)
+    LOSS_PACKETS = set(random.sample(range(total_packets), min(6, total_packets)))
+    dropped_once = set()
+    log_message(f"[CLIENT] Random LOSS_PACKETS selected: {sorted(LOSS_PACKETS)}")
+
     base = 0
     next_seq = 0
     timers = {}
@@ -220,9 +346,6 @@ def send_with_ack(sock, file_bytes, progress_bar, status_text):
     ssthresh = 16
     reno_state = "Slow Start"
     recover_point = None
-
-    LOSS_PACKETS = {10, 50}
-    dropped_once = set()
 
     log_message(f"[CLIENT][CC] cwnd={cwnd:.2f} ssthresh={ssthresh:.2f} state={reno_state}")
 
@@ -291,7 +414,7 @@ def send_with_ack(sock, file_bytes, progress_bar, status_text):
             for seq in range(base, next_seq):
                 if seq in timers and now - timers[seq] >= TIMEOUT:
                     ssthresh = max(cwnd / 2, 2)
-                    cwnd = 1
+                    cwnd = ssthresh
                     reno_state = "Slow Start"
                     log_message(f"[CLIENT][CC] TIMEOUT: cwnd={cwnd:.2f} ssthresh={ssthresh:.2f} state={reno_state}")
 
@@ -304,9 +427,8 @@ def send_with_ack(sock, file_bytes, progress_bar, status_text):
     time.sleep(0.1)
     status_text.text("Upload complete!")
     progress_bar.progress(1.0)
+
     return True
-
-
 
 def receive_with_ack(sock, progress_bar, status_text):
     filesize = int(sock.recv(16).decode().strip())
