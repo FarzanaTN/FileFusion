@@ -126,3 +126,9 @@ For development purposes:
 ---
 
 **Note**: Remember to keep both terminals open while using FileFusion, as the application requires both the backend server and frontend client to be running simultaneously.
+
+## 📹 Project Demonstration
+
+Watch our FileFusion demo video:
+
+👉 [Click here to watch the video](https://drive.google.com/file/d/1gffLQrfsgSOxhtXkGQZ61vLsyakRjsf9/view?usp=sharing)
