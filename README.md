@@ -45,7 +45,7 @@ Before running FileFusion, ensure you have the following installed:
 ```
 FileFusion/
 ├── backend/
-│   ├── server.py
+│    ├── server.py
 |    ├── converter.py
 |    └── requirements.txt
 ├── frontend/
